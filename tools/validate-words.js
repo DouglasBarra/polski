@@ -187,7 +187,7 @@ function checkExample(who, ex, pl) {
     if (n > 8) warn(who, field, `${n} words; keep it to 8 or fewer`);
     if (typeof pl === "string" && pl.trim()) {
       const stem = fold(pl).replace(/[^a-z]/g, "").slice(0, 3);
-      if (stem && !fold(ex.pl).includes(stem)) {
+      if (stem && !fold(ex.pl).replace(/[^a-z]/g, "").includes(stem)) {
         warn(who, field, `does not contain "${stem}" (first letters of pl "${pl}"); wrong word or unusual inflection?`);
       }
     }
