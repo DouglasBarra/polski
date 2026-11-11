@@ -209,6 +209,7 @@ function rod(B, a, b, r0, r1, sides, color, o) {
 // ================================================================== build
 export function createForeground(ctx, opts = {}) {
   const o = { ...DEFAULTS, ...opts };
+  for (const k of ['shrine', 'stork', 'bench']) o[k] = { ...DEFAULTS[k], ...(opts[k] || {}) };   // partial overrides keep the rest
   if (opts.firePosition) o.firePosition = { x: +opts.firePosition.x || 0, y: +opts.firePosition.y || 0, z: +opts.firePosition.z || 0 };
   if (!Number.isFinite(o.wind)) o.wind = DEFAULTS.wind;
   const reduced = !!ctx.reducedMotion;
@@ -276,6 +277,13 @@ export function createForeground(ctx, opts = {}) {
       }
     }
   }
+  // the shrine stands in a gap in the fence (a field entrance): no post or rail crowds it
+  for (let k = posts.length - 1; k >= 0; k--) {
+    if (Math.hypot(posts[k].x - o.shrine.x, posts[k].z - o.shrine.z) < 1.1) {
+      if (k > 0) posts[k - 1].gapAfter = true;
+      posts.splice(k, 1);
+    }
+  }
   const fenceInfo = [];
   posts.forEach((p, k) => {
     const h = R(1.12, 1.34);
@@ -288,6 +296,7 @@ export function createForeground(ctx, opts = {}) {
   const broken = posts.length > 5 ? 3 : -1;     // one lower rail has come loose
   for (let k = 0; k < posts.length - 1; k++) {
     const a = posts[k], b = posts[k + 1];
+    if (a.gapAfter) continue;
     for (const [hy, rr] of [[0.47, 0.036], [0.97, 0.04]]) {
       const ya = hy + R(-0.04, 0.04), yb = hy + R(-0.04, 0.04);
       const A = new THREE.Vector3(a.x, Math.min(ya, a.h - 0.08), a.z);
@@ -434,7 +443,8 @@ export function createForeground(ctx, opts = {}) {
   }
   {
     // guitar (local: x right, y up the neck, +z out of the soundboard; base at the origin)
-    const TOP = lin('#b4844f'), SIDE = lin('#5a301b'), NECK = lin('#4a2b18'), BOARD = lin('#1d130c');
+    // soundboard kept soft (about 60% of a honey spruce, desaturated) so it never competes with the flames
+    const TOP = lin('#b4844f').lerp(new THREE.Color(0.17, 0.17, 0.17), 0.3).multiplyScalar(0.6), SIDE = lin('#5a301b'), NECK = lin('#4a2b18'), BOARD = lin('#1d130c');
     const rL = 0.185, cL = 0.19, rU = 0.14, cU = 0.42, D = 0.095;
     const yi = 0.3368, aL = Math.atan2(yi - cL, Math.sqrt(rL * rL - (yi - cL) ** 2)), aU = Math.atan2(yi - cU, Math.sqrt(rL * rL - (yi - cL) ** 2));
     const pts = [];
@@ -456,13 +466,13 @@ export function createForeground(ctx, opts = {}) {
       colorFn: (x, y, z, nx, ny, nz, lx, ly, lz, out) => { if (nx * faceW.x + ny * faceW.y + nz * faceW.z < 0.8) out.copy(SIDE); },
     });
     gAdd(new THREE.CircleGeometry(0.044, 16), M(0, 0.372, 0.0015), lin('#070403'));                      // sound hole
-    gAdd(new THREE.RingGeometry(0.047, 0.058, 20), M(0, 0.372, 0.001), lin('#dcc69a'));                   // rosette
+    gAdd(new THREE.RingGeometry(0.047, 0.058, 20), M(0, 0.372, 0.001), lin('#dcc69a').multiplyScalar(0.55));   // rosette
     gAdd(new THREE.BoxGeometry(0.15, 0.026, 0.01), M(0, 0.15, 0.004), lin('#25150c'));                     // bridge
     gAdd(new THREE.BoxGeometry(0.052, 0.44, 0.036), M(0, 0.54 + 0.22, -0.02), NECK);                      // neck
     gAdd(new THREE.BoxGeometry(0.054, 0.51, 0.008), M(0, 0.47 + 0.255, 0.004), BOARD);                     // fretboard
     gAdd(new THREE.BoxGeometry(0.078, 0.18, 0.026), M(0, 0.98 + 0.085, -0.03, -0.22, 0, 0), lin('#2f1a0f')); // headstock
     // six strings as one pale strip each would shimmer at this distance; one faint band reads as strings
-    gAdd(new THREE.BoxGeometry(0.03, 0.83, 0.002), M(0, 0.15 + 0.415, 0.0095), lin('#6e6256'));
+    gAdd(new THREE.BoxGeometry(0.03, 0.83, 0.002), M(0, 0.15 + 0.415, 0.0095), lin('#6e6256').multiplyScalar(0.7));
   }
 
   const propsGeo = track(P.build(), geometries);
