@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<!--
+  Iskry · dev/fence.html — test bench for js/scene/fence.js (the split-rail fence).
+  Serve the repo root (python3 -m http.server) and open /dev/fence.html.
+  Loads the real sky / trees / fire / foreground (shrine) and the other near-world modules when they
+  load (guarded); otherwise a stand-in fire light and a flat dark ground.
+  Views (?view= or keys 1-6): real (the site camera), close (a post and lashed rails near the fire),
+  gate (the field gate at the shrine), loose (the hanging rail), xbrace, fallen, along (down the line).
+  Drag to orbit, wheel to dolly (any view). Other params: ?rm=1 &nosky=1 &nofire=1 &notrees=1 &nofg=1
+  &near=0 (skip ground/grass/road/log) &gain=N (brighten the canvas to inspect) &hour=H &dpr=N
+  Console: window.fenceH is the handle; measure() -> GPU ms of the fence at the current view (timer queries), rebuild(rm) checks dispose().
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iskry · fence bench</title>
+  <link rel="stylesheet" href="../css/tokens.css">
+  <style>
+    html, body { margin: 0; height: 100%; background: var(--night, #1a120d); overflow: hidden; }
+    canvas { display: block; position: fixed; inset: 0; width: 100%; height: 100%; touch-action: none; }
+    #hud { position: fixed; left: 10px; bottom: 8px; font: 11px ui-monospace, monospace; color: #6b5543; pointer-events: none; }
+  </style>
+  <script type="importmap">
+    { "imports": {
+        "three": "../vendor/three/three.module.js",
+        "three/addons/": "../vendor/three/addons/"
+    } }
+  </script>
+</head>
+<body>
+  <div id="hud"></div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { createFence } from '../js/scene/fence.js';
+    import { FIRE, CAMERA } from '../js/scene/layout.js';
+
+    const q = new URLSearchParams(location.search);
+    window.__errors = [];
+    addEventListener('error', (e) => window.__errors.push(String(e.message)));
+
+    class Orbit {   // drag: orbit, wheel: dolly (OrbitControls is not vendored)
+      constructor(cam, el) {
+        this.cam = cam; this.target = new THREE.Vector3(); this.sph = new THREE.Spherical();
+        let down = null;
+        el.addEventListener('pointerdown', (e) => { down = [e.clientX, e.clientY]; el.setPointerCapture(e.pointerId); });
+        el.addEventListener('pointerup', () => { down = null; });
+        el.addEventListener('pointermove', (e) => {
+          if (!down) return;
+          this.sph.theta -= (e.clientX - down[0]) * 0.005; this.sph.phi -= (e.clientY - down[1]) * 0.005;
+          this.sph.phi = Math.min(Math.PI - 0.05, Math.max(0.05, this.sph.phi));
+          down = [e.clientX, e.clientY]; this.apply();
+        });
+        el.addEventListener('wheel', (e) => { this.sph.radius *= Math.exp(e.deltaY * 0.001); this.apply(); }, { passive: true });
+      }
+      set(pos, target) { this.target.copy(target); this.sph.setFromVector3(pos.clone().sub(target)); this.apply(); }
+      apply() { this.cam.position.setFromSpherical(this.sph).add(this.target); this.cam.lookAt(this.target); }
+    }
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(parseFloat(q.get('dpr')) || Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.NoToneMapping;
+    document.body.appendChild(renderer.domElement);
+    if (q.has('gain')) renderer.domElement.style.filter = `brightness(${+q.get('gain') || 3})`;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.05, 450);
+    scene.fog = new THREE.Fog(new THREE.Color('#301d11'), 14, 72);
+    const css = getComputedStyle(document.documentElement);
+    const readToken = (name, fallback) => {
+      const v = css.getPropertyValue(name).trim();
+      if (!v) return fallback;
+      const n = parseFloat(v);
+      return typeof fallback === 'number' && Number.isFinite(n) ? n : v;
+    };
+    const ctx = { scene, camera, renderer, reducedMotion: q.get('rm') === '1', readToken };
+    const firePos = new THREE.Vector3(FIRE.x, FIRE.y, FIRE.z);
+    const mods = {};
+    const tryLoad = async (name, factory, opts) => {
+      try { const m = await import(`../js/scene/${name}.js`); mods[name] = m[factory](ctx, opts); }
+      catch (e) { console.warn('dev: ' + name + ' unavailable', e.message); }
+    };
+    if (q.get('nosky') !== '1') await tryLoad('sky', 'createSky', { horizonY: 0, radius: 90 });
+    if (mods.sky && mods.sky.fogColor) { scene.fog.color.copy(mods.sky.fogColor); scene.fog.near = mods.sky.fogNear; scene.fog.far = mods.sky.fogFar; }
+    if (!mods.sky) {
+      renderer.setClearColor(new THREE.Color('#1a120d'), 1);
+      const ground = new THREE.Mesh(new THREE.CircleGeometry(89, 96).rotateX(-Math.PI / 2).translate(0, 0, 12),
+        new THREE.MeshBasicMaterial({ color: '#0d0806', fog: true, depthWrite: false }));
+      ground.renderOrder = -45; scene.add(ground);
+    }
+    const loads = [];
+    if (q.get('notrees') !== '1') loads.push(tryLoad('trees', 'createTrees', { firePosition: firePos.clone(), wind: 0.25, seed: 7 }));
+    if (q.get('nofire') !== '1') loads.push(tryLoad('fire', 'createFire', { position: firePos.clone(), scale: 1.3 }));
+    if (q.get('nofg') !== '1') loads.push(tryLoad('foreground', 'createForeground', { firePosition: firePos.clone(), wind: 0.25 }));
+    if (q.get('near') !== '0') for (const [n, f] of [['ground', 'createGround'], ['grass', 'createGrass'], ['road', 'createRoad'], ['log', 'createLog']])
+      loads.push(tryLoad(n, f, { firePosition: firePos.clone(), wind: 0.25 }));
+    await Promise.all(loads);
+    if (!mods.fire) {   // stand-in fire light, like fire.js's
+      const l = new THREE.PointLight('#ffae62', 30, 60, 2); l.position.set(firePos.x, 0.62, firePos.z); scene.add(l);
+    }
+
+    const make = () => createFence(ctx, { firePosition: firePos.clone(), wind: 0.25 });
+    let t0 = performance.now();
+    window.fenceH = make();
+    const buildMs = performance.now() - t0;
+    const L = window.fenceH.layout;
+
+    // the time of day, like the core (?hour pins it)
+    const hour = q.has('hour') ? parseFloat(q.get('hour')) : 21;
+    const tod = hour >= 20 || hour < 3.5 ? { hour, dusk: 0, night: 1, dawn: 0 } : hour < 9 ? { hour, dusk: 0, night: 0.3, dawn: 0.7 } : { hour, dusk: 0.8, night: 0.2, dawn: 0 };
+    for (const k in mods) mods[k].setTimeOfDay && mods[k].setTimeOfDay(tod);
+    window.fenceH.setTimeOfDay(tod);
+
+    // views
+    const P = (k) => L.posts[Math.max(0, Math.min(L.posts.length - 1, k))];
+    const gn = L.gate ? L.posts.findIndex((p) => p[0] === L.gate[0][0] && p[1] === L.gate[0][1]) : 3;
+    const tgt = (p, y) => new THREE.Vector3(p[0], y, p[1]);
+    const toward = (p, dx, dy, dz) => new THREE.Vector3(p[0] + dx, dy, p[1] + dz);
+    const VIEWS = {
+      real: () => [new THREE.Vector3(CAMERA.x, CAMERA.y, CAMERA.z), new THREE.Vector3(0, 4.1, -10)],
+      close: () => { const p = P(gn - 1); return [toward(p, -1.25, 1.05, 0.55), tgt(p, 0.72)]; },
+      gate: () => { const p = P(gn); return [toward(p, -2.6, 1.4, 2.2), tgt(p, 0.7).add(new THREE.Vector3(0.3, 0, -1.2))]; },
+      loose: () => { const p = P(L.loose); const b = P(L.loose + 1); return [toward(p, -2.2, 1.1, 0.4), tgt(p, 0.4).lerp(tgt(b, 0.4), 0.5)]; },
+      xbrace: () => { const p = P(L.xBrace); const b = P(L.xBrace + 1); return [toward(p, -2.4, 1.2, -0.6), tgt(p, 0.6).lerp(tgt(b, 0.6), 0.5)]; },
+      fallen: () => { const p = P(L.fallen); const b = P(L.fallen + 1); return [toward(p, -2.0, 1.3, 0.2), tgt(p, 0.3).lerp(tgt(b, 0.3), 0.5)]; },
+      along: () => [new THREE.Vector3(1.6, 1.4, 9), tgt(P(4), 0.8)],
+      paired: () => { const p = P(L.paired); return [toward(p, -1.3, 1.0, 0.6), tgt(p, 0.7)]; },
+    };
+    const controls = new Orbit(camera, renderer.domElement);
+    window.view = (name) => { const v = (VIEWS[name] || VIEWS.real)(); controls.set(v[0], v[1]); return name; };
+    view(q.get('view') || 'real');
+    const keys = ['real', 'close', 'gate', 'loose', 'xbrace', 'fallen', 'along', 'paired'];
+    addEventListener('keydown', (e) => { const i = +e.key - 1; if (keys[i]) view(keys[i]); });
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+      for (const k in mods) mods[k].resize && mods[k].resize(innerWidth, innerHeight);
+      window.fenceH.resize(innerWidth, innerHeight);
+    });
+
+    window.__dev = { THREE, scene, camera, renderer, ctx, mods, createFence };
+    window.rebuild = (rm) => { window.fenceH.dispose(); ctx.reducedMotion = !!rm; window.fenceH = make(); return renderer.info.memory; };
+
+    // GPU cost of the fence at the current view: N renders inside a timer query, fence shown vs hidden
+    const gl = renderer.getContext();
+    const tq = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+    // alone = true hides everything else but the lights (conservative: nothing occludes the fence)
+    window.measure = (n = 30, alone = false) => new Promise((res) => {
+      const others = alone ? scene.children.filter((c) => c !== window.fenceH.group && c.visible && !c.isLight && !c.getObjectByProperty('isLight', true)) : [];
+      const hid = [];
+      if (alone) { for (const c of others) { c.visible = false; hid.push(c); } for (const k in mods) mods[k].group && mods[k].group.traverse((o) => { if (o.isMesh || o.isPoints || o.isLine || o.isSprite) { if (o.visible) { o.visible = false; hid.push(o); } } }); }
+      const restore = () => { for (const c of hid) c.visible = true; };
+      const run = (show) => {
+        window.fenceH.group.visible = show;
+        const qq = tq ? gl.createQuery() : null;
+        const a = performance.now();
+        if (qq) gl.beginQuery(tq.TIME_ELAPSED_EXT, qq);
+        for (let i = 0; i < n; i++) renderer.render(scene, camera);
+        if (qq) gl.endQuery(tq.TIME_ELAPSED_EXT);
+        gl.finish();
+        window.fenceH.group.visible = true;
+        return { qq, cpu: (performance.now() - a) / n };
+      };
+      run(true); run(false);
+      const pairs = [];
+      for (let k = 0; k < 7; k++) pairs.push([run(true), run(false)]);
+      renderer.render(scene, camera);
+      const info = { calls: renderer.info.render.calls, tris: renderer.info.render.triangles };
+      const poll = () => {
+        if (tq && !pairs.every(([a, b]) => gl.getQueryParameter(a.qq, gl.QUERY_RESULT_AVAILABLE) && gl.getQueryParameter(b.qq, gl.QUERY_RESULT_AVAILABLE))) return setTimeout(poll, 50);
+        const ms = pairs.map(([a, b]) => tq ? (gl.getQueryParameter(a.qq, gl.QUERY_RESULT) - gl.getQueryParameter(b.qq, gl.QUERY_RESULT)) / 1e6 / n : a.cpu - b.cpu);
+        const tot = pairs.map(([a]) => tq ? gl.getQueryParameter(a.qq, gl.QUERY_RESULT) / 1e6 / n : a.cpu);
+        if (tq) pairs.forEach(([a, b]) => { gl.deleteQuery(a.qq); gl.deleteQuery(b.qq); });
+        restore();
+        ms.sort((x, y) => x - y); tot.sort((x, y) => x - y);
+        res({ timer: !!tq, fenceMs: +ms[3].toFixed(3), all: ms.map((x) => +x.toFixed(3)), frameMs: +tot[3].toFixed(3),
+              px: [renderer.domElement.width, renderer.domElement.height], buildMs: +buildMs.toFixed(1),
+              fenceCalls: window.fenceH.group.children.length, ...info, layout: window.fenceH.layout, mods: Object.keys(mods), errors: window.__errors });
+      };
+      poll();
+    });
+
+    const clock = new THREE.Clock();
+    renderer.setAnimationLoop(() => {
+      const dt = Math.min(0.1, clock.getDelta()), t = clock.elapsedTime;
+      for (const k in mods) mods[k].update(t, dt);
+      window.fenceH.update(t, dt);
+      renderer.render(scene, camera);
+    });
+    document.getElementById('hud').textContent = `fence · ${L.posts.length} posts, ${L.triangles} tris, built in ${buildMs.toFixed(0)} ms · ` + Object.keys(mods).join(', ') + (mods.fire ? '' : ' (stand-in fire light)') + ' · keys 1-8: ' + keys.join(' ');
+  </script>
+</body>
+</html>
