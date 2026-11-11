@@ -62,8 +62,8 @@ const bdx = BENCH.dirX / bl, bdz = BENCH.dirZ / bl;
 const bfx = bdz > 0 ? -bdz : bdz, bfz = bdz > 0 ? bdx : -bdx;           // the side facing the camera (+z)
 // Guitar: base on the ground in front of the log, leaning back onto it, soundboard toward fire and camera.
 export const GUITAR = {
-  x: BENCH.x + bdx * 0.3 + bfx * (BENCH.radius + 0.2),
-  z: BENCH.z + bdz * 0.3 + bfz * (BENCH.radius + 0.2),
+  x: BENCH.x + bdx * 0.3 + bfx * (BENCH.radius + 0.12),
+  z: BENCH.z + bdz * 0.3 + bfz * (BENCH.radius + 0.12),
   lean: 0.45,                // rad back from vertical
   faceX: bfx - 0.25, faceZ: bfz,
 };
