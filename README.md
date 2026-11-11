@@ -4,11 +4,27 @@ Polish words drifting on the night wind past a fire. Catch one to see what it me
 
 A night in the Polish countryside: a bonfire, Douglas-firs against the hills, the real stars and moon of tonight, and a few guitar strings across the dark. Words ride the wind from left to right. Hover one to slow it, click it (or Tab to it and press Enter) to catch it: a card opens beside it with the meaning, how to say it, an example and related words. Now and then a small gust carries in a handful of words that belong together, and once in a while a rare one drifts by. The words you have caught are kept, quietly, in the journal (the book in the bottom-right corner). No lessons, scores or streaks.
 
-Run it (the scene is an ES module, so it needs a local server, not `file://`):
+## Start and stop
+
+The scene is an ES module, so it needs a local server, not `file://`.
+
+**Start**, from this folder:
 
 ```sh
-python3 -m http.server 8765   # from this folder, then open http://localhost:8765/
+python3 -m http.server 8765
 ```
+
+Then open http://localhost:8765/.
+
+**Stop:**
+- If it runs in your terminal, press `Ctrl+C` there.
+- If it runs in the background (or you closed that terminal):
+
+  ```sh
+  pkill -f "http.server 8765"
+  ```
+
+To check whether it is still running: `lsof -i :8765` (no output means it is stopped).
 
 No build step. three.js 0.186.1 is vendored in `vendor/three/`. The rules every file follows are in `CONTRACT.md`.
 
