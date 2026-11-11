@@ -5,7 +5,8 @@
   Uses the real camera, and the real sky.js / fire.js / trees.js when they load (guarded);
   otherwise a stand-in fire light, a flat dark ground and the core's fog.
   URL params: ?rm=1 (reduced motion) &nosky=1 &nofire=1 &notrees=1 &band=1 (shows the words' band)
-              &labels=0 (no placeholder words) &cam=close (a closer look at the bench) &gain=N
+              &labels=0 (no placeholder words) &cam=stork|shrine (close looks) &gain=N
+              &play=preen|clatter|shift|stretch|flight (start a stork behaviour; also fg.stork.play(name))
 -->
 <html lang="en">
 <head>
@@ -57,7 +58,10 @@
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 400);
-    if (q.get('cam') === 'close') { camera.position.set(0.6, 1.3, 2.5); camera.lookAt(-1.6, 0.5, -4.2); }
+    const cam = q.get('cam');
+    if (cam === 'stork') { camera.fov = 22; camera.updateProjectionMatrix(); camera.position.set(-13.2, 7.3, -14.6); camera.lookAt(-15.85, 7.25, -19); }
+    else if (cam === 'storkwide') { camera.position.set(-9.5, 6.8, -5.5); camera.lookAt(-16.5, 8.2, -21); }
+    else if (cam === 'shrine') { camera.position.set(1.4, 1.75, 0.6); camera.lookAt(3.3, 1.55, -3.2); }
     else { camera.position.set(0, 1.6, 12); camera.lookAt(0, 4.1, -10); }
     scene.fog = new THREE.Fog(new THREE.Color('#301d11'), 14, 72);   // the core applies sky.js's suggestion
 
@@ -92,6 +96,7 @@
     }
 
     const fg = createForeground(ctx, { firePosition: firePos.clone(), wind: 0.25 });
+    if (q.get('play')) setTimeout(() => fg.stork.play(q.get('play')), 600);
     window.fg = fg; window.__dev = { THREE, scene, camera, renderer, ctx, mods, createForeground };
 
     // placeholder words across the band, to judge legibility over the foreground
@@ -109,7 +114,7 @@
     });
 
     // rebuild (as the core does when reduced motion changes) to check dispose()
-    window.rebuild = (rm) => { fg.dispose(); ctx.reducedMotion = !!rm; window.fg = createForeground(ctx, { firePosition: firePos.clone(), wind: 0.25 }); return renderer.info.memory; };
+    window.rebuild = (rm) => { window.fg.dispose(); ctx.reducedMotion = !!rm; window.fg = createForeground(ctx, { firePosition: firePos.clone(), wind: 0.25 }); return renderer.info.memory; };
 
     // CPU cost of fg.update and GPU cost estimate with / without the foreground
     window.measure = () => {
