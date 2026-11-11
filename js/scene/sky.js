@@ -11,7 +11,7 @@
                  a low wooded rise behind the treeline (66 m, open in the valley window),
                  the village on the far lake shore (157 m), two forested hill ranges
                  (190 m, 250 m), Giewont, the "sleeping knight" (325 m), and the Tatras (360 m)
-    3. ground  the meadow and valley floor, one disc at y = 0
+    3. ground  the meadow and valley floor, a ring at y = 0 from 28 m out (ground.js draws inside)
     4. lake    a calm lake in the valley (82-150 m), reflecting the sky and three village windows
     5. mist    one drifting veil of valley mist in front of the hills
 
@@ -43,6 +43,7 @@ const DEFAULTS = {
   valleyAz: 0.17,          // radians, + = right of straight ahead
   valleyHalf: 0.3,
   // distances from `center`, metres
+  groundInner: 28,         // m: ground.js owns the floor inside this (feather 28.6-30.4 m)
   riseDistance: 66,
   lakeNear: 72, lakeFar: 150,
   villageDistance: 157, villageAz: 0.24,
@@ -637,7 +638,9 @@ export function createSky(ctx, opts = {}) {
   // -------------------------------------------------------------- ground
   // Drawn after the land and without depth writes: it still hides the land's buried
   // skirts, and glow billboards reaching below y = 0 leave no hard line on it.
-  const groundGeo = track(new THREE.CircleGeometry(300, 160));
+  // A ring: inside ~30 m ground.js draws the lit floor (feathering into this one
+  // between 28.6 and 30.4 m), so the disc starts at 28 m to avoid filling those pixels twice.
+  const groundGeo = track(new THREE.RingGeometry(o.groundInner, 300, 192, 1));
   groundGeo.rotateX(-Math.PI / 2);
   groundGeo.translate(C.x, 0, C.z);
   groundGeo.setAttribute('aKind', new THREE.Float32BufferAttribute(new Float32Array(groundGeo.attributes.position.count), 1));
