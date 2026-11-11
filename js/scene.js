@@ -340,7 +340,7 @@ function moduleTable() {
       extents: Object.assign({}, TUNE.stringExtents),
       firePosition: v([TUNE.firePos[0], TUNE.firePos[1] + 0.7, TUNE.firePos[2]])   // the glow follows the fire
     })],
-    ["fire", "createFire", () => ({ position: v(TUNE.firePos), scale: TUNE.fireScale })]
+    ["fire", "createFire", () => ({ position: v(TUNE.firePos), scale: TUNE.fireScale, wind })]
   ];
 }
 

@@ -6,7 +6,7 @@ Iskry ("sparks") is a place to meet Polish words for pleasure. No lessons, level
 
 ## Hard rules
 
-- Plain static HTML/CSS/JS. No framework and no build step. One dependency: three.js 0.186.1 (r186), **vendored** in `vendor/three/` and resolved by the import map in `index.html` (`three`, `three/addons/`). Nothing is loaded from a CDN at runtime except the two web fonts.
+- Plain static HTML/CSS/JS. No framework and no build step. One dependency: three.js 0.186.1 (r186), **vendored** in `vendor/three/` and resolved by the import map in `index.html` (`three`, `three/addons/`). Nothing is loaded from a CDN at runtime except the two web fonts. Vendored addons: `addons/renderers/CSS3DRenderer.js` (the site) and `addons/controls/OrbitControls.js` (dev pages only).
 - Served over http: `python3 -m http.server 8765` from the repo root, then open `http://localhost:8765/`. The old "must work from `file://`" rule is gone: the scene is now a three.js ES module, and browsers refuse to load modules from `file://`.
 - One global: `window.Iskry`. `data/words.js`, `js/memory.js` and `js/card.js` stay classic scripts (each starts with `window.Iskry = window.Iskry || {};` and wraps its code in an IIFE). `js/scene.js` and `js/scene/*.js` are ES modules; `scene.js` also sets `Iskry.scene`.
 - Edit only the files and sections you own. Do not rename ids, classes, events or tokens listed here.
@@ -63,7 +63,7 @@ fence      opts { firePosition, wind }                      // the split-rail fe
 log        opts { firePosition, wind }                      // the log bench and the guitar
 foreground opts { firePosition, wind }                      + { layout }                      // the shrine and the stork
 strings    opts { count, extents, firePosition }           + { touch(prevPos, pos), pluckNearest(worldPos, strength), nearestPoint(worldPos) }
-fire       opts { position, scale }                        + { light, intensity() }          // flicker 0..1
+fire       opts { position, scale, wind }                  + { light, fill, intensity() }    // light: inverse-square key light; fill: bounce light 3.4 m up; flicker 0..1
 ```
 
 Optional on any handle: `setTimeOfDay({ hour, dusk, night, dawn })` (the weights sum to 1). The core calls it on load and every 20 s from the visitor's clock (dusk peaks at 17:30, deep night runs 20:00 to 03:30, dawn peaks around 06:30 to 07:00; the fire is always lit, so daytime shows as early night: dusk 0.3, night 0.7), then re-applies the sky's fog. `?hour=5.5` pins the clock. When both the sky and the moon are loaded, the core calls `sky.setMoon(moon.direction, moon.illumination)`.
