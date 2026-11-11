@@ -82,6 +82,8 @@ const TUNE = {
   firePos: [-3, 0, -2],        // left of centre, so the embers blow across the middle
   fireScale: 1.3,              // a hearth, not a candle
   treeSeed: 7,                 // the same forest every visit
+  stork: { x: -16, z: -19, height: 6.4 },  // the stork's pole, out at the left edge of the words' band
+  shrine: { x: 3.3, z: -3.2, faceX: -1, faceZ: 0.6 },  // the kapliczka, nearer, so the far church reads
   heatLift: 0.14,              // m, how far the warm air above the fire lifts a word
   heatWidth: 2.6,              // m, half-width of the warm column (gaussian)
   heatDepth: 7,                // m, how far in front of or behind the fire it is felt
@@ -231,7 +233,7 @@ function buildStage() {
   scene = new THREE.Scene();
   scene.fog = new THREE.Fog(new THREE.Color(String(readToken("--fog", "#2b1a10"))), TUNE.fogNear, TUNE.fogFar);
 
-  camera = new THREE.PerspectiveCamera(T.fov, 1, 0.1, 400);
+  camera = new THREE.PerspectiveCamera(T.fov, 1, 0.1, 450);   // the Tatras reach 369 m
   camPos0.fromArray(TUNE.cameraPos);
   camera.position.copy(camPos0);
   camera.lookAt(TUNE.cameraLook[0], TUNE.cameraLook[1], TUNE.cameraLook[2]);
@@ -298,6 +300,7 @@ async function loadModule(name, factory, opts, epoch) {
     modules[name] = handle || null;
     if (handle && handle.setTimeOfDay) { try { handle.setTimeOfDay(timeOfDay()); } catch (e) { /* optional */ } }
     if (name === "sky") applyFog(handle);
+    linkMoon();
   } catch (e) {
     console.warn("Iskry: scene module \"" + name + "\" is unavailable.", e);
   }
@@ -315,7 +318,7 @@ function moduleTable() {
     ["stars", "createStars", () => ({ date, latitudeDeg: PLACE.latitudeDeg, longitudeDeg: PLACE.longitudeDeg })],
     ["moon", "createMoon", () => ({ date })],
     ["trees", "createTrees", () => ({ firePosition: v(TUNE.firePos), wind, seed: TUNE.treeSeed })],
-    ["foreground", "createForeground", () => ({ firePosition: v(TUNE.firePos), wind })],
+    ["foreground", "createForeground", () => ({ firePosition: v(TUNE.firePos), wind, stork: TUNE.stork, shrine: TUNE.shrine })],
     ["strings", "createStrings", () => ({
       count: Math.max(1, Math.round(Number(readToken("--strings-count", 6)) || 6)),
       extents: Object.assign({}, TUNE.stringExtents),
@@ -354,6 +357,13 @@ function applyFog(sky) {
   if (sky.fogFar > scene.fog.near) scene.fog.far = sky.fogFar;
   const hex = "#" + sky.fogColor.getHexString();
   if (hex !== fogHex) { fogHex = hex; root.style.setProperty("--scene-fog", hex); }
+}
+
+// The sky brightens its air faintly around the moon, when both are there.
+function linkMoon() {
+  const sky = modules.sky, moon = modules.moon;
+  if (!sky || !moon || !sky.setMoon || !moon.direction) return;
+  try { sky.setMoon(moon.direction, Number(moon.illumination) || 0); } catch (e) { /* optional */ }
 }
 
 /* ---------- time of day ---------- */
@@ -395,6 +405,7 @@ function stepTimeOfDay() {
     if (m && m.setTimeOfDay) { try { m.setTimeOfDay(tod); } catch (e) { /* optional */ } }
   }
   applyFog(modules.sky);
+  linkMoon();
 }
 
 /* ---------- camera ---------- */
@@ -657,11 +668,11 @@ function occlude() {
   for (let i = 0; i < n; i++) {
     const a = live[i];
     if (a.alpha < 0.05) continue;
-    const ahw = Math.max(4, a.halfW - 0.5 * a.fontPx), ahh = 0.42 * a.fontPx;
+    const ahw = Math.max(4, a.halfW - 0.5 * a.fontPx), ahh = 0.55 * a.fontPx;
     for (let j = i + 1; j < n; j++) {
       const b = live[j];
       if (b.alpha < 0.05) continue;
-      const bhw = Math.max(4, b.halfW - 0.5 * b.fontPx), bhh = 0.42 * b.fontPx;
+      const bhw = Math.max(4, b.halfW - 0.5 * b.fontPx), bhh = 0.55 * b.fontPx;
       const ox = ahw + bhw - Math.abs(a.sx - b.sx);
       if (ox <= 0) continue;
       const oy = ahh + bhh - Math.abs(a.sy - b.sy);

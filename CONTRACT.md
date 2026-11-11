@@ -52,14 +52,16 @@ World: metres, ground at y = 0. The fire is at (-3, 0, -2), scale 1.3: the focal
 ```js
 ctx    = { scene, camera, renderer, reducedMotion, readToken(name, fallback) }
 handle = { group, update(timeSec, dtSec), resize(width, height), dispose() }
-sky        opts { horizonY, radius }                       + { fogColor, fogNear, fogFar }   // suggestions
+sky        opts { horizonY, radius }                       + { fogColor, fogNear, fogFar, setMoon(direction, illumination) }   // fog: suggestions
 stars      opts { date, latitudeDeg, longitudeDeg }                                         // the real sky over Poland tonight
 moon       opts { date }                                   + { direction, phase, illumination }
 trees      opts { firePosition, wind, seed }               (also exports buildDouglasFir, buildBirch)
-foreground opts { firePosition, wind }
+foreground opts { firePosition, wind, stork, shrine }       + { layout }                      // stork { x, z, height }, shrine { x, z, faceX, faceZ }
 strings    opts { count, extents, firePosition }           + { touch(prevPos, pos), pluckNearest(worldPos, strength), nearestPoint(worldPos) }
 fire       opts { position, scale }                        + { light, intensity() }          // flicker 0..1
 ```
+
+Optional on any handle: `setTimeOfDay({ hour, dusk, night, dawn })` (the weights sum to 1). The core calls it on load and every 20 s from the visitor's clock (daytime counts as dusk because the fire is always lit; deep night runs 22:00 to 02:30; dawn peaks at 06:30), then re-applies the sky's fog. `?hour=5.5` pins the clock. When both the sky and the moon are loaded, the core calls `sky.setMoon(moon.direction, moon.illumination)`.
 
 `wind` is the mean wind in m/s along +x. The place is central Poland (52.1° N, 19.4° E); `date` is the visitor's clock at load.
 
