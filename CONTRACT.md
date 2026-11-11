@@ -155,7 +155,7 @@ Callers:
 - A pluck vibrates the word vertically (`--pluck-amplitude`, `--pluck-cycles`, `--dur-pluck`) and plucks the nearest string.
 - JS reads motion, depth, camera and density tokens with `getComputedStyle(document.documentElement)` at init and again when `(prefers-reduced-motion: reduce)` changes. Durations are in `ms`, speeds in px/s, depths in metres, the rest unitless.
 - Reduced motion: a slow steady drift, no bob, no gusts, no camera motion, no word vibration; the modules get `reducedMotion: true` (steady fire, few particles, still strings).
-- Performance: one render loop, device pixel ratio capped at 2, one layout read per word (its width, once) plus one `getBoundingClientRect()` per catch.
+- Performance: one render loop, device pixel ratio capped at 2 and lowered in 0.25 steps (down to 1) while the frame rate averages under 52 fps over 150 frames (WebGL only; the words are DOM and stay crisp; it never climbs back within a visit), one layout read per word (its width, once) plus one `getBoundingClientRect()` per catch.
 
 ## Words
 

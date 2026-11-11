@@ -48,6 +48,8 @@
     Look-and-feel knobs that are not tokens live in TUNE below.
     Time of day: modules may expose setTimeOfDay({ hour, dusk, night, dawn }) (weights sum
     to 1, from the visitor's clock); it is called on load and every TUNE.timeEvery seconds.
+    Resolution adapts: the WebGL pixel ratio steps down while the frame rate stays under
+    TUNE.slowFps (see adaptResolution). ?debug=1 exposes Iskry.scene.debug() for profiling.
     Dev only: ?bare=1 skips the environment modules, ?gust=1 sends the first gust after 4 s,
     ?hour=5.5 pins the clock.
 
@@ -112,7 +114,14 @@ const TUNE = {
   whisperAlpha: 0.3,           // peak opacity of a gust's label
   whisperSize: 0.5,            // label size relative to a word at the same depth
   whisperMinPx: 13,
-  maxPixelRatio: 2
+  maxPixelRatio: 2,
+  // Adaptive resolution: if the frame rate over a window averages below slowFps, the WebGL
+  // night (never the words, which are DOM and stay crisp) drops its pixel ratio a step. It
+  // never climbs back within a visit, so it cannot oscillate.
+  slowFps: 52,
+  slowWindow: 150,             // frames per verdict
+  ratioStep: 0.25,
+  minPixelRatio: 1
 };
 
 let root, worldLayer, wordsLayer;
@@ -140,6 +149,8 @@ let nextSpawnAt = 0;         // in clock seconds
 let holding = null;          // the word from click until word:release
 let pluckTimer = 0;
 let resizeQueued = false;
+let pixelCap = Infinity;     // lowered by adaptResolution()
+let perfFrames = 0, perfTime = 0;
 let rareOnScreen = 0;
 
 // The right edge of the open sky, in px: the viewport edge, or the journal panel's edge
@@ -269,7 +280,7 @@ function measure() {
   camera.updateProjectionMatrix();
   focal = (H / 2) / Math.tan((T.fov * Math.PI / 180) / 2);
   if (gl) {
-    gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, TUNE.maxPixelRatio));
+    gl.setPixelRatio(Math.min(window.devicePixelRatio || 1, TUNE.maxPixelRatio, pixelCap));
     gl.setSize(W, H, false);
   }
   css.setSize(W, H);
@@ -1013,6 +1024,21 @@ function populate() {
 
 /* ---------- loop ---------- */
 
+function adaptResolution(dt) {
+  if (!gl || dt <= 0 || document.hidden || clock < 6) return;   // let shaders and bakes settle first
+  perfFrames++;
+  perfTime += dt;
+  if (perfFrames < TUNE.slowWindow) return;
+  const slow = perfFrames / perfTime < TUNE.slowFps;
+  perfFrames = 0;
+  perfTime = 0;
+  const now = gl.getPixelRatio();
+  if (!slow || now <= TUNE.minPixelRatio + 0.01) return;
+  pixelCap = Math.max(TUNE.minPixelRatio, now - TUNE.ratioStep);
+  gl.setPixelRatio(pixelCap);
+  gl.setSize(W, H, false);
+}
+
 function frame(now) {
   rafId = 0;
   const dt = lastNow ? Math.min(0.1, Math.max(0, (now - lastNow) / 1000)) : 0;
@@ -1057,6 +1083,7 @@ function frame(now) {
 
   if (gl) gl.render(scene, camera);
   css.render(scene, camera);
+  adaptResolution(dt);
   start();
 }
 
@@ -1068,6 +1095,8 @@ function stop() {
   if (rafId) cancelAnimationFrame(rafId);
   rafId = 0;
   lastNow = 0;
+  perfFrames = 0;
+  perfTime = 0;
 }
 
 function onResize() {
@@ -1138,4 +1167,7 @@ export function init(rootEl, words) {
 }
 
 Iskry.scene = { init };
-Iskry.scene._dbg = () => ({ skyEdge, skyEdgeGoal, jp: !!journalPanel, occ: live.filter((w) => w.occ > 0.01).map((w) => w.id + ":" + w.occ.toFixed(2) + " d" + w.d.toFixed(1)), ghost: ghost && ghost.id, pointerPx, pointerPy, hitDirty, hitAt, clock, holding: holding && holding.state });
+// Dev only (?debug=1): the stage, for profiling and tuning from the console.
+if (new URLSearchParams(location.search).has("debug")) {
+  Iskry.scene.debug = () => ({ renderer: gl, scene, camera, modules, live, T, TUNE, pixelCap });
+}
