@@ -74,7 +74,7 @@ Card (inside `#card-root`; the card agent builds everything in it):
 ## Keyboard
 
 - Words are real `<button>`s, so Tab reaches them and Enter/Space catches them, same path as a click.
-- A focused word behaves like a hovered one (slow and bright).
+- A keyboard-focused word (`:focus-visible`) behaves like a hovered one (slow and bright). Focus that follows a mouse close does not count, so the released word drifts on.
 - Esc closes the card. Focus goes back to the word.
 
 ## Memory hooks
@@ -92,3 +92,25 @@ Card (inside `#card-root`; the card agent builds everything in it):
 ## Words
 
 Schema and respelling guide live at the top of `data/words.js`. Themes: `fire-night`, `home`, `food`, `nature`, `feelings`, `people`, `small-words`. Check with `node tools/validate-words.js`.
+
+`family` means **related words** (the card labels it so). Two kinds only: words that share a root (`kot`/`kotek`, `noc`/`dobranoc`) and fixed conversational partners (`tak`/`nie`, `dziękuję`/`proszę`). Words that only share a topic are not family. Links are symmetric.
+
+Validator severity: an unknown extra field is an error; a character outside the expected Polish set is a warning.
+
+## Accepted deviations (Phase 1 review)
+
+Scene:
+
+- Each `.spark` also carries `lang="pl"`, `aria-label="{pl}"` and `data-pl="{pl}"`. `data-pl` feeds a bright `::after` twin, so brightening is an opacity fade only.
+- A hovered or keyboard-focused word stops climbing at 90% of the climb, so it cannot fade out from under the pointer.
+- Look-and-feel knobs that are not tokens live in `TUNE` at the top of `js/scene.js`; local opacity knobs (`--scene-glow-*`, `--scene-grain`) live on `.scene`.
+- `#scene-fire` holds `.scene__glow--wide|body|core` and `.scene__grain`; `#scene-strings` holds one `svg.scene__strings-svg` with `.scene__string` paths.
+- A pluck also makes the nearest string shiver.
+
+Card:
+
+- Extra elements: `.card__content` (crossfade wrapper), `.card__rare` ("a rare spark", shown when `word.rare`; the card also gets `is-rare`), `.card__example`, `.card__family-label`, `.card__family-list` (`ul`; each `.card__family-item` button sits in an `li`), `.card__family-pl`, `.card__family-en`.
+- `.card__word` is an `h2` with `tabindex="-1"`. After a switch to a related word, focus moves to it.
+- When the card fits on neither side of the word it goes below it, or above if there is more room there, centered on the word.
+- `#card-root` gets `data-anchored="true"` and `--spark-x/y/rx/ry` when opened from a `rect`; the backdrop uses them to leave a clearing around the held word. `.card` gets `--card-origin`.
+- A `word:catch` that arrives while a card is still closing ends that close at once and opens the new card.

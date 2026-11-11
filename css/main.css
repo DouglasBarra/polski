@@ -122,6 +122,573 @@ button {
 
 /* === SCENE (scene agent) === */
 
+/* Local knobs. Opacities are unitless; durations are multiples of --dur-flicker. */
+.scene {
+  --scene-glow-wide: 0.95;
+  --scene-glow-body: 0.3;
+  --scene-glow-core: 0.34;
+  --scene-grain: 0.035;
+}
+
+/* --- Firelight: three glows breathing at unrelated rates, so the cycle never repeats --- */
+.scene__glow {
+  position: absolute;
+  left: 50%;
+  border-radius: 50%;
+  transform: translateX(-50%);
+  transform-origin: 50% 50%;
+  opacity: var(--glow-o);
+  will-change: opacity, transform;
+  animation: scene-flicker var(--glow-dur) var(--ease-drift) var(--glow-delay) infinite alternate;
+}
+
+.scene__glow--wide {
+  --glow-o: var(--scene-glow-wide);
+  --glow-dur: calc(var(--dur-flicker) * 1.9);
+  --glow-delay: calc(var(--dur-flicker) * -0.7);
+  width: 180vw;
+  height: 150vh;
+  bottom: -75vh;
+  background: radial-gradient(closest-side, var(--glow-soft) 0%, var(--glow-soft) 25%, transparent 100%);
+}
+
+.scene__glow--body {
+  --glow-o: var(--scene-glow-body);
+  --glow-dur: var(--dur-flicker);
+  --glow-delay: calc(var(--dur-flicker) * -0.3);
+  width: 110vw;
+  height: 84vh;
+  bottom: -42vh;
+  background: radial-gradient(closest-side, var(--fire-deep) 0%, transparent 100%);
+}
+
+.scene__glow--core {
+  --glow-o: var(--scene-glow-core);
+  --glow-dur: calc(var(--dur-flicker) * 0.62);
+  --glow-delay: calc(var(--dur-flicker) * -0.45);
+  width: 62vw;
+  height: 44vh;
+  bottom: -24vh;
+  background: radial-gradient(closest-side, var(--fire-core) 0%, var(--fire) 38%, transparent 100%);
+  animation-name: scene-flicker-core;
+}
+
+@keyframes scene-flicker {
+  0%   { opacity: var(--glow-o); transform: translateX(-50%) scale(1, 1); }
+  23%  { opacity: calc(var(--glow-o) * (1 - var(--flicker-strength) * 0.7)); transform: translateX(-50%) scale(1.01, 0.985); }
+  41%  { opacity: calc(var(--glow-o) * (1 - var(--flicker-strength) * 0.2)); transform: translateX(-50%) scale(0.995, 1.02); }
+  67%  { opacity: calc(var(--glow-o) * (1 - var(--flicker-strength))); transform: translateX(-50%) scale(1.012, 0.975); }
+  84%  { opacity: calc(var(--glow-o) * (1 - var(--flicker-strength) * 0.4)); transform: translateX(-50%) scale(1, 1.01); }
+  100% { opacity: var(--glow-o); transform: translateX(-50%) scale(1, 1); }
+}
+
+/* The core also licks a little from side to side. */
+@keyframes scene-flicker-core {
+  0%   { opacity: var(--glow-o); transform: translateX(-50%) scale(1, 1); }
+  19%  { opacity: calc(var(--glow-o) * (1 - var(--flicker-strength))); transform: translateX(-49%) scale(0.98, 1.03); }
+  46%  { opacity: calc(var(--glow-o) * (1 - var(--flicker-strength) * 0.3)); transform: translateX(-51%) scale(1.02, 0.97); }
+  71%  { opacity: calc(var(--glow-o) * (1 - var(--flicker-strength) * 0.8)); transform: translateX(-50.5%) scale(0.99, 1.04); }
+  100% { opacity: var(--glow-o); transform: translateX(-50%) scale(1, 1); }
+}
+
+/* Faint film grain over the sky (static, so it costs nothing per frame). */
+.scene__grain {
+  position: absolute;
+  inset: 0;
+  opacity: var(--scene-grain);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
+  background-size: 180px 180px;
+}
+
+/* --- Guitar strings --- */
+.scene__strings-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.scene__string {
+  fill: none;
+  stroke: var(--string);
+  stroke-width: 1;
+  stroke-linecap: round;
+}
+
+.scene__string--bright {
+  stroke: var(--string-bright);
+}
+
+/* --- Sparks: the words --- */
+.spark {
+  position: absolute;
+  left: 0;
+  top: 0;
+  display: block;
+  padding: 0.35em 0.6em;
+  border-radius: 999px;
+  font-family: var(--font-pl);
+  font-weight: var(--weight-pl);
+  line-height: 1;
+  white-space: nowrap;
+  color: var(--ember);
+  text-shadow: 0 0 0.6em var(--glow-soft);
+  opacity: 0;
+  isolation: isolate;
+  will-change: transform, opacity;
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/* Bright twin of the word: hover, focus and catch fade it in (opacity only). */
+.spark::after {
+  content: attr(data-pl);
+  position: absolute;
+  inset: 0;
+  padding: inherit;
+  color: var(--ember-bright);
+  text-shadow: 0 0 0.45em var(--glow-strong), 0 0 1.4em var(--glow-soft);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity var(--dur-hover) var(--ease-in-out);
+}
+
+.spark:hover::after,
+.spark:focus-visible::after,
+.spark.is-plucked::after,
+.spark.is-caught::after {
+  opacity: 1;
+}
+
+.spark.is-plucked::after {
+  transition-duration: calc(var(--dur-pluck) * 0.4);
+  transition-timing-function: var(--ease-pluck);
+}
+
+.spark:focus {
+  outline: none;
+}
+
+.spark:focus-visible {
+  outline: 1.5px solid var(--focus-ring);
+  outline-offset: 3px;
+  border-radius: 999px;
+}
+
+/* Rare words: italic, with a slow warm halo that breathes behind them. */
+.spark.is-rare {
+  font-style: italic;
+}
+
+.spark.is-rare::before {
+  content: "";
+  position: absolute;
+  inset: -45% -20%;
+  z-index: -1;
+  border-radius: 50%;
+  background: radial-gradient(closest-side, var(--glow-strong), transparent);
+  opacity: 0.18;
+  pointer-events: none;
+  animation: spark-breathe calc(var(--dur-flicker) * 1.6) var(--ease-drift) infinite alternate;
+}
+
+@keyframes spark-breathe {
+  from { opacity: 0.12; }
+  to   { opacity: 0.38; }
+}
+
+.spark.is-golden {
+  color: var(--gold);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .scene__glow,
+  .spark.is-rare::before {
+    animation: none;
+  }
+}
+
 
 /* === CARD (card agent) === */
+
+/*
+  The card is a warm, translucent surface that grows out of the held word.
+  JS sets, per open: left/top and --card-origin on .card; --spark-x/y/rx/ry and
+  data-anchored on .card-root. Only transform and opacity ever animate.
+*/
+
+/* --- Backdrop: dims the sky but leaves a soft clearing around the held word --- */
+.card-root__backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--backdrop);
+}
+
+.card-root[data-anchored="true"] .card-root__backdrop {
+  background: radial-gradient(
+    ellipse var(--spark-rx) var(--spark-ry) at var(--spark-x) var(--spark-y),
+    transparent 0%,
+    transparent 50%,
+    var(--backdrop) 100%
+  );
+}
+
+/* --- Card surface --- */
+.card {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: min(var(--card-width), calc(100vw - 2 * var(--card-margin)));
+  max-height: calc(100vh - 2 * var(--card-margin));
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--card-border) transparent;
+  padding: var(--card-pad);
+  color: var(--cream);
+  background-color: var(--card-bg);
+  background-color: color-mix(in srgb, var(--card-bg) 90%, transparent);
+  background-image: radial-gradient(
+    circle 22rem at var(--card-origin, 50% 0%),
+    var(--glow-soft),
+    transparent 70%
+  );
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  backdrop-filter: blur(14px) saturate(1.15);
+  border: 1px solid var(--card-border);
+  border-radius: var(--card-radius);
+  box-shadow: var(--card-shadow);
+  transform-origin: var(--card-origin, 50% 50%);
+}
+
+.card:focus,
+.card__word:focus {
+  outline: none;
+}
+
+.card :focus-visible {
+  outline-offset: 3px;
+}
+
+/* --- Open / close --- */
+.card-root[data-state="opening"] .card-root__backdrop {
+  animation: card-fade-in var(--dur-card-open) var(--ease-out-soft) both;
+}
+
+.card-root[data-state="closing"] .card-root__backdrop {
+  animation: card-fade-out var(--dur-card-close) var(--ease-in-soft) both;
+}
+
+.card-root[data-state="opening"] .card {
+  animation: card-rise-in var(--dur-card-open) var(--ease-out-soft) both;
+}
+
+.card-root[data-state="closing"] .card {
+  animation: card-rise-out var(--dur-card-close) var(--ease-in-soft) both;
+}
+
+@keyframes card-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes card-fade-out {
+  from { opacity: 1; }
+  to { opacity: 0; }
+}
+
+@keyframes card-rise-in {
+  from { opacity: 0; transform: translateY(10px) scale(0.93); }
+  to { opacity: 1; transform: none; }
+}
+
+@keyframes card-rise-out {
+  from { opacity: 1; transform: none; }
+  to { opacity: 0; transform: translateY(6px) scale(0.96); }
+}
+
+/* --- Swapping to a related word: content crossfades, the card stays put --- */
+.card__content {
+  position: relative;
+  opacity: 1;
+  transition: opacity calc(var(--dur-card-swap) / 2) var(--ease-in-out);
+}
+
+.card__content.is-swapping {
+  opacity: 0;
+}
+
+/* --- Close button --- */
+.card__close {
+  position: absolute;
+  top: 0.7rem;
+  right: 0.7rem;
+  z-index: 1;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  color: var(--muted);
+  opacity: 0.65;
+  transition: opacity var(--dur-hover) var(--ease-in-out);
+}
+
+.card__close::before,
+.card__close::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 1rem;
+  height: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.card__close::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.card__close::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.card__close:hover,
+.card__close:focus-visible {
+  color: var(--ember-bright);
+  opacity: 1;
+}
+
+/* --- Rare tag --- */
+.card__rare {
+  display: flex;
+  align-items: center;
+  gap: 0.55em;
+  margin: 0 2.5rem 0.6rem 0;
+  font-family: var(--font-en);
+  font-size: calc(var(--size-small) * 0.85);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--fire-core);
+}
+
+.card__rare::before {
+  content: "";
+  flex: none;
+  width: 0.45em;
+  height: 0.45em;
+  background: currentColor;
+  box-shadow: 0 0 10px var(--glow-strong);
+  transform: rotate(45deg);
+}
+
+/* A hairline of light along the top edge of a rare card, breathing very slowly. */
+.card.is-rare {
+  border-color: var(--glow-strong);
+}
+
+.card.is-rare::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 12%;
+  right: 12%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--fire-core), transparent);
+  opacity: 0.6;
+  pointer-events: none;
+  animation: card-rare-breathe calc(var(--dur-flicker) * 1.6) var(--ease-drift) infinite alternate;
+}
+
+@keyframes card-rare-breathe {
+  from { opacity: 0.25; }
+  to { opacity: 0.9; }
+}
+
+/* --- Word, respelling, meaning --- */
+.card__word {
+  margin: 0;
+  padding-right: 2.5rem;
+  font-family: var(--font-pl);
+  font-size: var(--size-card-word);
+  font-weight: var(--weight-pl-strong);
+  font-optical-sizing: auto;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  color: var(--ember-bright);
+  text-shadow: 0 0 28px var(--glow-soft);
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.card.is-rare .card__word {
+  text-shadow: 0 0 26px var(--glow-strong);
+}
+
+.card__respelling {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.7em;
+  margin: 0.85rem 0 0;
+  padding: 0.18em 0.9em 0.22em;
+  font-family: var(--font-en);
+  font-style: normal;
+  font-size: var(--size-card-respelling);
+  letter-spacing: 0.07em;
+  color: var(--ember);
+  background-color: color-mix(in srgb, var(--fire) 8%, transparent);
+  border: 1px solid var(--card-border);
+  border-radius: 1.2em;
+}
+
+.card__respelling::before {
+  content: "say";
+  font-size: calc(var(--size-small) * 0.78);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.card__meaning {
+  margin: 1rem 0 0;
+  font-family: var(--font-en);
+  font-style: italic;
+  font-size: var(--size-card-meaning);
+  line-height: 1.35;
+  color: var(--cream);
+  text-wrap: pretty;
+}
+
+/* --- Example --- */
+.card__example {
+  margin-top: 1.6rem;
+  padding-left: 1rem;
+  border-left: 2px solid var(--card-border);
+}
+
+.card__example-pl {
+  margin: 0;
+  font-family: var(--font-pl);
+  font-weight: var(--weight-pl);
+  font-size: var(--size-card-example);
+  line-height: var(--leading);
+  color: var(--cream);
+  overflow-wrap: break-word;
+  hyphens: auto;
+  text-wrap: pretty;
+}
+
+.card__example-en {
+  margin: 0.35rem 0 0;
+  font-family: var(--font-en);
+  font-style: italic;
+  font-size: var(--size-small);
+  line-height: var(--leading);
+  color: var(--muted);
+  overflow-wrap: break-word;
+  text-wrap: pretty;
+}
+
+/* --- Related words --- */
+.card__family {
+  margin-top: 1.6rem;
+  padding-top: 1.1rem;
+  border-top: 1px solid var(--card-border);
+}
+
+.card__family-label {
+  margin: 0 0 0.7rem;
+  font-family: var(--font-en);
+  font-size: calc(var(--size-small) * 0.85);
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.card__family-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.card__family-item {
+  position: relative;
+  isolation: isolate;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.1rem;
+  max-width: 100%;
+  padding: 0.5rem 0.9rem 0.55rem;
+  text-align: left;
+  background-color: var(--card-bg-raised);
+  border: 1px solid var(--card-border);
+  border-radius: calc(var(--card-radius) * 0.75);
+}
+
+/* Hover fill is an overlay whose opacity animates (no color transitions). */
+.card__family-item::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: -1;
+  border-radius: inherit;
+  background: var(--ember);
+  opacity: 0;
+  transition: opacity var(--dur-hover) var(--ease-in-out);
+}
+
+.card__family-item:hover::before,
+.card__family-item:focus-visible::before {
+  opacity: 0.16;
+}
+
+.card__family-pl {
+  font-family: var(--font-pl);
+  font-weight: var(--weight-pl);
+  font-size: var(--size-card-example);
+  line-height: 1.25;
+  color: var(--ember-bright);
+  overflow-wrap: anywhere;
+}
+
+.card__family-en {
+  font-family: var(--font-en);
+  font-style: italic;
+  font-size: var(--size-small);
+  line-height: 1.25;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+/* --- Small screens --- */
+@media (max-width: 30rem) {
+  .card {
+    padding: calc(var(--card-pad) * 0.8);
+  }
+
+  .card__word {
+    font-size: calc(var(--size-card-word) * 0.85);
+  }
+}
+
+/* --- Reduced motion: no movement, only a fade (durations come from tokens) --- */
+@media (prefers-reduced-motion: reduce) {
+  .card-root[data-state="opening"] .card {
+    animation-name: card-fade-in;
+  }
+
+  .card-root[data-state="closing"] .card {
+    animation-name: card-fade-out;
+  }
+
+  .card.is-rare::after {
+    animation: none;
+  }
+}
 
