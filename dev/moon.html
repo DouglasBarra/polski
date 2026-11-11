@@ -1,0 +1,219 @@
+<!DOCTYPE html>
+<!--
+  Iskry · dev/moon.html — standalone test bench for js/scene/moon.js.
+  Serve the repo root (python3 -m http.server) and open /dev/moon.html.
+  URL params:
+    view=close|scene   close-up (drag to orbit, wheel to zoom) or the site camera with sky.js behind
+    moonphase=0..1     phase override (0 new, 0.25 first quarter, 0.5 full, 0.75 last quarter)
+    date=ISO           the date whose real phase is shown (default: now)
+    size=deg az=deg alt=deg tilt=deg relief=N tex=N (baked map height)   moon options
+    rm=1               reduced motion       labels=0   no test words in scene view
+    gain=N             brightens the canvas N times (CSS filter) to inspect earthshine and banding
+  window.measure() returns CPU/GPU timings; window.moon is the handle.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iskry · moon bench</title>
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..600&display=swap&subset=latin-ext" rel="stylesheet">
+  <style>
+    html, body { margin: 0; height: 100%; background: var(--night); overflow: hidden; }
+    #gl { position: fixed; inset: 0; }
+    #gl canvas { display: block; }
+    #ui { position: fixed; left: 12px; bottom: 10px; font: 11px ui-monospace, monospace; color: #8a7058; display: flex; gap: 14px; align-items: center; }
+    #ui input { width: 260px; accent-color: #a8642c; }
+    #ui a { color: #b39a82; }
+    .lbl {
+      position: fixed; font-family: var(--font-pl); color: var(--ember); white-space: nowrap; pointer-events: none;
+      text-shadow: 0 0 0.16em color-mix(in srgb, var(--night-deep) 72%, transparent), 0 0 0.7em var(--glow-soft);
+      transform: translate(-50%, -50%);
+    }
+  </style>
+  <script type="importmap">
+    { "imports": {
+        "three": "../vendor/three/three.module.js",
+        "three/addons/": "../vendor/three/addons/"
+    } }
+  </script>
+</head>
+<body>
+  <div id="gl"></div>
+  <div id="ui">
+    <label>phase <input id="phase" type="range" min="0" max="1" step="0.001"></label>
+    <label id="hourL">hour <input id="hour" type="range" min="0" max="24" step="0.05" style="width:180px"></label>
+    <span id="info"></span>
+    <a id="toggle" href="#"></a>
+  </div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { createMoon, moonPhase } from '../js/scene/moon.js';
+
+    const q = new URLSearchParams(location.search);
+    const view = q.get('view') === 'scene' ? 'scene' : 'close';
+    window.__errors = [];
+    addEventListener('error', (e) => window.__errors.push(String(e.message)));
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.NoToneMapping;
+    document.getElementById('gl').appendChild(renderer.domElement);
+    if (q.has('gain')) renderer.domElement.style.filter = `brightness(${+q.get('gain') || 6})`;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 400);
+    camera.position.set(0, 1.6, 12);
+    camera.lookAt(0, 4.1, -10);
+
+    const css = getComputedStyle(document.documentElement);
+    const readToken = (name, fallback) => {
+      const v = css.getPropertyValue(name).trim();
+      if (!v) return fallback;
+      const n = parseFloat(v);
+      return /^-?[\d.]+(ms|px)?$/.test(v) && !isNaN(n) ? n : v;
+    };
+    const ctx = { scene, camera, renderer, reducedMotion: q.get('rm') === '1', readToken };
+
+    // sky (and stars) behind it in scene view, if they load (guarded, like the core does)
+    let sky = null, stars = null;
+    const date = q.has('date') ? new Date(q.get('date')) : new Date();
+    if (view === 'scene') {
+      try {
+        const mod = await import('../js/scene/sky.js');
+        sky = mod.createSky(ctx, { horizonY: 0, radius: 90 });
+        scene.fog = new THREE.Fog(sky.fogColor, sky.fogNear, sky.fogFar);
+      } catch (e) { console.warn('sky.js unavailable', e); }
+      if (q.get('stars') !== '0') try {
+        const mod = await import('../js/scene/stars.js');
+        stars = mod.createStars(ctx, { date, facingAzDeg: 120 });
+      } catch (e) { console.warn('stars.js unavailable', e); }
+    }
+
+    const num = (k) => (q.has(k) && q.get(k) !== '' && Number.isFinite(+q.get(k)) ? +q.get(k) : undefined);
+    const opts = {
+      date, phase: num('moonphase'), azimuthDeg: num('az'), altitudeDeg: num('alt'), angularSizeDeg: num('size'),
+      tiltDeg: num('tilt'), relief: num('relief'), textureHeight: num('tex') ?? (view === 'close' ? 1536 : undefined),
+      followCamera: view === 'scene', followRealSky: view === 'scene' && q.get('real') !== '0',
+      facingAzDeg: stars && Number.isFinite(stars.facingAzDeg) ? stars.facingAzDeg : 120,
+    };
+    for (const k in opts) if (opts[k] === undefined) delete opts[k];
+    const t0 = performance.now();
+    const moon = createMoon(ctx, opts);
+    const bakeMs = performance.now() - t0;
+    window.moon = moon;
+
+    // ---- close-up: orbit the camera around the moon (drag), zoom (wheel)
+    const target = moon.direction.clone().multiplyScalar(moon.distance);
+    // a long lens from far away, so we see the whole lit hemisphere as from the earth (no close-up perspective)
+    let yaw = 0, pitch = 0, dist = moon.radius * 22;
+    if (view === 'close') { camera.fov = 6; camera.updateProjectionMatrix(); }
+    const placeClose = () => {
+      const back = moon.direction.clone().negate();
+      const right = new THREE.Vector3(0, 1, 0).cross(back).normalize();
+      back.applyAxisAngle(new THREE.Vector3(0, 1, 0), yaw).applyAxisAngle(right, pitch);
+      camera.position.copy(target).addScaledVector(back, dist);
+      camera.up.set(0, 1, 0);
+      camera.lookAt(target);
+    };
+    if (view === 'close') {
+      placeClose();
+      let drag = null;
+      renderer.domElement.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, yaw, pitch }; });
+      addEventListener('pointerup', () => { drag = null; });
+      addEventListener('pointermove', (e) => {
+        if (!drag) return;
+        yaw = THREE.MathUtils.clamp(drag.yaw - (e.clientX - drag.x) * 0.005, -1.2, 1.2);
+        pitch = THREE.MathUtils.clamp(drag.pitch - (e.clientY - drag.y) * 0.005, -1.2, 1.2);
+        placeClose();
+      });
+      addEventListener('wheel', (e) => { dist = THREE.MathUtils.clamp(dist * Math.exp(e.deltaY * 0.001), moon.radius * 6, moon.radius * 60); placeClose(); }, { passive: true });
+      window.setOrbit = (y, p, d) => { yaw = y; pitch = p; if (d) dist = moon.radius * d; placeClose(); };
+    }
+
+    // ---- test words over the moon (scene view), to judge readability
+    const labels = [];
+    if (view === 'scene' && q.get('labels') !== '0') {
+      for (const [t, dx, dy, px] of [['księżyc', 0, 0, 30], ['noc', -70, -55, 22], ['gwiazda', 90, 40, 20], ['spokój', -10, 70, 26]]) {
+        const el = document.createElement('div'); el.className = 'lbl'; el.textContent = t; el.style.fontSize = px + 'px';
+        document.body.appendChild(el); labels.push({ el, dx, dy });
+      }
+    }
+    const sp = new THREE.Vector3();
+    const placeLabels = () => {
+      if (!labels.length) return;
+      sp.copy(moon.direction).multiplyScalar(moon.distance).add(camera.position).project(camera);
+      const x = (sp.x * 0.5 + 0.5) * innerWidth, y = (-sp.y * 0.5 + 0.5) * innerHeight;
+      for (const l of labels) { l.el.style.left = x + l.dx + 'px'; l.el.style.top = y + l.dy + 'px'; }
+    };
+
+    // ---- UI
+    const slider = document.getElementById('phase');
+    const info = document.getElementById('info');
+    const real = moonPhase(date);
+    const showInfo = () => {
+      info.textContent = `${moon.placement} · phase ${moon.phase.toFixed(3)} · lit ${(moon.illumination * 100).toFixed(1)}% · real ${date.toISOString().slice(0, 10)}: ${real.phase.toFixed(3)} (${real.ageDays.toFixed(1)} d) · bake ${bakeMs.toFixed(0)} ms`;
+    };
+    slider.value = moon.phase;
+    slider.addEventListener('input', () => { moon.setPhase(+slider.value); showInfo(); });
+    // time of day, as the core does it (on load and every 20 s), and a slider to scrub the night
+    const hourIn = document.getElementById('hour');
+    const nowHour = () => { const d = new Date(); return d.getHours() + d.getMinutes() / 60; };
+    let hour = q.has('hour') ? +q.get('hour') : nowHour();
+    const tod = (h) => ({ hour: h, dusk: 0, night: 1, dawn: 0 });
+    const applyHour = () => {
+      if (moon.setTimeOfDay) moon.setTimeOfDay(tod(hour));
+      if (stars && stars.setTimeOfDay) stars.setTimeOfDay(tod(hour));
+      if (sky && sky.setTimeOfDay) sky.setTimeOfDay(tod(hour));
+      if (sky && sky.setMoon) sky.setMoon(moon.direction, moon.illumination);
+      showInfo();
+    };
+    hourIn.value = hour;
+    hourIn.addEventListener('input', () => { hour = +hourIn.value; applyHour(); });
+    if (view === 'scene' && !q.has('moonphase')) { applyHour(); setInterval(() => { if (!q.has('hour')) { hour = nowHour(); hourIn.value = hour; } applyHour(); }, 20000); }
+    else document.getElementById('hourL').style.display = 'none';
+    window.setHour = (h) => { hour = h; hourIn.value = h; applyHour(); };
+    showInfo();
+    const tog = document.getElementById('toggle');
+    tog.textContent = view === 'close' ? 'scene view' : 'close-up';
+    const nq = new URLSearchParams(q); nq.set('view', view === 'close' ? 'scene' : 'close'); tog.href = '?' + nq;
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+      moon.resize(innerWidth, innerHeight);
+      if (sky) sky.resize(innerWidth, innerHeight);
+    });
+
+    // timing: CPU cost of moon.update, GPU cost estimate via gl.finish() with / without the moon
+    window.measure = async () => {
+      const gl = renderer.getContext();
+      let upd = 0;
+      const timeRender = (vis) => {
+        moon.group.visible = vis; gl.finish();
+        const a = performance.now();
+        for (let i = 0; i < 40; i++) { const u = performance.now(); moon.update(i * 0.016, 0.016); upd += performance.now() - u; renderer.render(scene, camera); }
+        gl.finish(); moon.group.visible = true; return (performance.now() - a) / 40;
+      };
+      timeRender(true); upd = 0;
+      const withMoon = timeRender(true), updMs = upd / 40, without = timeRender(false);
+      return { renderWithMoonMs: +withMoon.toFixed(3), renderWithoutMoonMs: +without.toFixed(3), moonUpdateMs: +updMs.toFixed(4), bakeMs: +bakeMs.toFixed(1),
+               size: [innerWidth, innerHeight, renderer.getPixelRatio()], calls: renderer.info.render.calls, errors: window.__errors };
+    };
+    window.renderer = renderer; window.__cam = camera;
+
+    const clock = new THREE.Clock();
+    renderer.setAnimationLoop(() => {
+      const dt = Math.min(0.1, clock.getDelta());
+      const t = clock.elapsedTime;
+      if (sky) sky.update(t, dt);
+      if (stars) stars.update(t, dt);
+      moon.update(t, dt);
+      renderer.render(scene, camera);
+      placeLabels();
+    });
+  </script>
+</body>
+</html>
