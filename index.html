@@ -13,6 +13,7 @@
   Scene owns everything inside #scene. It adds children to the two layers only:
     #scene-world    the WebGL canvas: night, fire, strings (aria-hidden)
     #scene-words    the CSS3D layer; each word is <button type="button" class="spark" data-id="...">
+  Journal (memory agent) owns everything inside #journal-root (journal.js builds it).
   Card agent owns everything inside #card-root (empty here; card.js builds it):
     #card-root[hidden][data-state="closed|opening|open|closing"]
     .card-root__backdrop, .card, .card__close, .card__word, .card__respelling, .card__meaning,
@@ -44,6 +45,7 @@
 
   <link rel="stylesheet" href="css/tokens.css">
   <link rel="stylesheet" href="css/main.css">
+  <link rel="stylesheet" href="css/journal.css">
 </head>
 <body>
   <h1 class="visually-hidden">Iskry: Polish words by the fire</h1>
@@ -54,12 +56,14 @@
   </main>
 
   <div id="card-root" class="card-root" data-state="closed" hidden></div>
+  <div id="journal-root"></div>
 
   <noscript><p class="noscript">Iskry needs JavaScript to let the words drift.</p></noscript>
 
   <script src="data/words.js"></script>
   <script src="js/memory.js"></script>
   <script src="js/card.js"></script>
+  <script src="js/journal.js"></script>
   <script type="module">
     import { init as initScene } from "./js/scene.js";
     const Iskry = window.Iskry || {};
@@ -67,6 +71,7 @@
     const wordsById = {};
     for (const w of words) wordsById[w.id] = w;
     Iskry.card.init(document.getElementById("card-root"), wordsById);
+    if (Iskry.journal) Iskry.journal.init(document.getElementById("journal-root"), wordsById);
     initScene(document.getElementById("scene"), words);
   </script>
 </body>

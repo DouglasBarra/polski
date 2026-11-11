@@ -121,9 +121,14 @@ button {
   into the canvas in #scene-world. Only the words are DOM, placed in 3D by CSS3DRenderer.
   Per word, JS sets: font-size (px, by depth), opacity, and --spark-fog (0 near .. 1 far).
   JS sets --scene-fog on .scene when sky.js suggests a fog color.
+  Local knobs: --spark-lift, how much of --ember-bright the nearest words carry at rest
+  (fading to none at --depth-far); --spark-shade, the soft dark underlay that keeps a word
+  legible where a string, the moon or the fire passes behind it.
 */
 .scene {
   --scene-fog: var(--fog);
+  --spark-lift: 34%;
+  --spark-shade: color-mix(in srgb, var(--night-deep) 72%, transparent);
 }
 
 .scene__world canvas {
@@ -135,16 +140,22 @@ button {
 /* --- Sparks: the words --- */
 .spark {
   --spark-fog: 0;
+  --spark-base: var(--ember);
   display: block;
   padding: 0.35em 0.6em;
   border-radius: 999px;
   font-family: var(--font-pl);
   font-weight: var(--weight-pl);
+  font-optical-sizing: auto;
   line-height: 1;
   white-space: nowrap;
-  /* Far words sink into the fog: same hue, less light. */
-  color: color-mix(in oklab, var(--ember), var(--scene-fog) calc(var(--spark-fog) * var(--fog-word-tint) * 100%));
-  text-shadow: 0 0 0.6em var(--glow-soft);
+  /* Near words carry a little of the bright ember; far words sink into the fog. */
+  color: color-mix(
+    in oklab,
+    color-mix(in oklab, var(--ember-bright) calc((1 - var(--spark-fog)) * var(--spark-lift)), var(--spark-base)),
+    var(--scene-fog) calc(var(--spark-fog) * var(--fog-word-tint) * 100%)
+  );
+  text-shadow: 0 0 0.16em var(--spark-shade), 0 0 0.7em var(--glow-soft);
   opacity: 0;
   isolation: isolate;
   will-change: transform, opacity;
@@ -158,7 +169,7 @@ button {
   inset: 0;
   padding: inherit;
   color: var(--ember-bright);
-  text-shadow: 0 0 0.45em var(--glow-strong), 0 0 1.4em var(--glow-soft);
+  text-shadow: 0 0 0.16em var(--spark-shade), 0 0 0.45em var(--glow-strong), 0 0 1.4em var(--glow-soft);
   opacity: 0;
   pointer-events: none;
   transition: opacity var(--dur-hover) var(--ease-in-out);
@@ -166,10 +177,14 @@ button {
 
 .spark:hover::after,
 .spark:focus-visible::after,
+.spark.is-hinted::after,
 .spark.is-plucked::after,
 .spark.is-caught::after {
   opacity: 1;
 }
+
+/* is-hinted: while a card is open the backdrop covers the words, so the scene marks the
+   word under the pointer itself: one click closes the card and catches that word. */
 
 .spark.is-plucked::after {
   transition-duration: calc(var(--dur-pluck) * 0.4);
@@ -186,30 +201,51 @@ button {
   border-radius: 999px;
 }
 
-/* Rare words: italic, with a slow warm halo that breathes behind them. */
+/* Rare finds: italic, a touch brighter, with a slow warm halo breathing behind them. */
 .spark.is-rare {
+  --spark-lift: 60%;
   font-style: italic;
 }
 
 .spark.is-rare::before {
   content: "";
   position: absolute;
-  inset: -45% -20%;
+  inset: -55% -22%;
   z-index: -1;
   border-radius: 50%;
-  background: radial-gradient(closest-side, var(--glow-strong), transparent);
-  opacity: 0.18;
+  background: radial-gradient(closest-side, var(--glow-strong), var(--glow-soft) 45%, transparent);
+  opacity: 0.2;
   pointer-events: none;
   animation: spark-breathe calc(var(--dur-flicker) * 1.6) var(--ease-drift) infinite alternate;
 }
 
 @keyframes spark-breathe {
-  from { opacity: 0.12; }
-  to   { opacity: 0.38; }
+  from { opacity: 0.14; }
+  to   { opacity: 0.42; }
 }
 
+/* Golden words: familiar ones, a soft gold instead of ember. */
 .spark.is-golden {
-  color: var(--gold);
+  --spark-base: var(--gold);
+}
+
+.spark.is-golden::after {
+  color: color-mix(in oklab, var(--gold), var(--ember-bright));
+}
+
+/* A themed gust's label: a faint line of English drifting ahead of its words. */
+.scene__whisper {
+  font-family: var(--font-en);
+  font-style: italic;
+  line-height: 1;
+  letter-spacing: var(--tracking-label);
+  white-space: nowrap;
+  color: var(--muted);
+  text-shadow: 0 0 0.8em var(--glow-soft);
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+  will-change: transform, opacity;
 }
 
 @media (prefers-reduced-motion: reduce) {
