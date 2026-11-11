@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<!--
+  Iskry · dev/stars.html — standalone test bench for js/scene/stars.js.
+  Serve the repo root (python3 -m http.server) and open /dev/stars.html.
+  URL params:
+    ?date=2026-11-10T22:00   sky time, read as Warsaw wall-clock time (default: now)
+    &az=120 | auto           compass azimuth the camera faces (default: the module's)
+    &look=1                  look-around mode (drag to turn, wheel to zoom; window.lookAt(yawDeg, pitchDeg)), with compass marks
+    &lines=1  &names=1       constellation figures / bright-star names (keys L and N toggle; O toggles look mode)
+    &speed=N                 sky time runs N times faster (dev only)
+    &hour=5.5 &dusk=0.5 &dawn=0  call setTimeOfDay like the core does
+    &rm=1 (reduced motion) &nosky=1 (no sky.js behind) &words=0 &nofire=1 &gain=N (CSS brightness, to inspect)
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iskry · stars bench</title>
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..600&display=swap&subset=latin-ext" rel="stylesheet">
+  <style>
+    html, body { margin: 0; height: 100%; background: var(--night, #1a120d); overflow: hidden; }
+    #gl, #css, #labels { position: fixed; inset: 0; }
+    #css, #labels { pointer-events: none; }
+    .lbl { font-family: var(--font-pl, serif); font-size: 26px; color: var(--ember, #f2a54a); white-space: nowrap; }
+    .nm { position: absolute; font: 11px ui-monospace, monospace; color: #8aa0c8; transform: translate(6px, -14px); white-space: nowrap; }
+    .cp { position: absolute; font: 600 13px ui-monospace, monospace; color: #c9a27a; transform: translate(-50%, 4px); }
+    #hud { position: fixed; left: 10px; bottom: 8px; font: 11px ui-monospace, monospace; color: #6b5543; white-space: pre; }
+  </style>
+  <script type="importmap">
+    { "imports": {
+        "three": "../vendor/three/three.module.js",
+        "three/addons/": "../vendor/three/addons/"
+    } }
+  </script>
+</head>
+<body>
+  <div id="gl"></div>
+  <div id="css"></div>
+  <div id="labels"></div>
+  <div id="hud"></div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
+    import { createStars } from '../js/scene/stars.js';
+    import { NAMES, STARS_B64 } from '../js/scene/stars-data.js';
+
+    const q = new URLSearchParams(location.search);
+    window.__errors = [];
+    addEventListener('error', (e) => window.__errors.push(String(e.message)));
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.NoToneMapping;
+    renderer.setClearColor(0x000000, 0);
+    document.getElementById('gl').appendChild(renderer.domElement);
+    if (q.has('gain')) renderer.domElement.style.filter = `brightness(${+q.get('gain') || 4})`;
+
+    const cssR = new CSS3DRenderer();
+    cssR.setSize(innerWidth, innerHeight);
+    document.getElementById('css').appendChild(cssR.domElement);
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(0x2b1a10, 14, 70);
+    const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 400);   // as js/scene.js
+    const home = new THREE.Vector3(0, 1.6, 12);
+    camera.position.copy(home);
+    camera.lookAt(0, 4.1, -10);
+
+    const cssVars = getComputedStyle(document.documentElement);
+    const readToken = (name, fallback) => {
+      const v = cssVars.getPropertyValue(name).trim();
+      if (!v) return fallback;
+      const n = parseFloat(v);
+      return /^-?[\d.]+(ms|px)?$/.test(v) && !isNaN(n) ? n : v;
+    };
+    const reduced = q.get('rm') === '1';
+    const ctx = { scene, camera, renderer, reducedMotion: reduced, readToken };
+
+    // sky.js behind, if it loads (its own stars, milky way and moon off: those are stars.js's / moon's now)
+    let sky = null;
+    if (q.get('nosky') !== '1') {
+      try {
+        const mod = await import('../js/scene/sky.js');
+        sky = mod.createSky(ctx, { horizonY: 0, radius: 90, starCount: 0, milkyWay: false, moon: false });
+        if (sky.fogColor) { scene.fog.color.copy(sky.fogColor); scene.fog.near = sky.fogNear; scene.fog.far = sky.fogFar; }
+      } catch (e) { console.warn('sky.js unavailable', e); }
+    }
+
+    const opts = { lines: q.get('lines') === '1' };
+    if (q.has('date')) opts.date = q.get('date');
+    if (q.has('az')) opts.facingAzDeg = q.get('az') === 'auto' ? 'auto' : +q.get('az');
+    if (q.has('speed')) opts.timeScale = +q.get('speed') || 1;
+    const tInit = performance.now();
+    const stars = createStars(ctx, opts);
+    const initMs = performance.now() - tInit;
+    window.stars = stars; window.renderer = renderer; window.__scene = scene; window.__cam = camera;
+    if (q.has('hour') || q.has('dusk') || q.has('dawn')) {
+      const tod = { hour: q.has('hour') ? +q.get('hour') : new Date().getHours() + new Date().getMinutes() / 60,
+                    dusk: +q.get('dusk') || 0, dawn: +q.get('dawn') || 0 };
+      tod.night = 1 - tod.dusk - tod.dawn;
+      stars.setTimeOfDay(tod); stars.setTimeOfDay(tod);   // twice: a pinned hour
+    }
+
+    // placeholder fire and words, as in dev/sky.html, to judge legibility
+    if (q.get('nofire') !== '1') {
+      const c = document.createElement('canvas'); c.width = c.height = 128;
+      const g = c.getContext('2d'); const rg = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+      rg.addColorStop(0, 'rgba(255,190,110,1)'); rg.addColorStop(0.25, 'rgba(240,132,44,0.5)'); rg.addColorStop(1, 'rgba(184,72,26,0)');
+      g.fillStyle = rg; g.fillRect(0, 0, 128, 128);
+      const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace;
+      const fire = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, blending: THREE.AdditiveBlending, depthWrite: false, fog: false }));
+      fire.position.set(-3, 0.7, -2); fire.scale.set(2.6, 2.6, 1); scene.add(fire);
+    }
+    const wordObjs = [];
+    if (q.get('words') !== '0') {
+      const words = [['iskra', -4, 3.2, 2], ['ognisko', 3.5, 5.0, -4], ['gwiazda', -6, 7.5, -9], ['las', 6, 9.6, -14], ['noc', -1, 10.4, -14], ['księżyc', 1, 2.2, 2]];
+      for (const [t, x, y, z] of words) {
+        const el = document.createElement('div'); el.className = 'lbl'; el.textContent = t;
+        const ob = new CSS3DObject(el); ob.position.set(x, y, z); ob.scale.setScalar(0.02); scene.add(ob); wordObjs.push(ob);
+      }
+    }
+
+    // look-around mode: drag to turn (yaw/pitch about the eye). OrbitControls is not vendored, so a tiny one here.
+    let look = false, yaw = 0, pitch = Math.atan2(2.5, 22), drag = null;
+    function aimLook() { camera.position.copy(home); camera.rotation.set(pitch, yaw, 0, 'YXZ'); }
+    function setLook(on) {
+      look = on;
+      if (look) { yaw = 0; pitch = Math.atan2(2.5, 22); aimLook(); }
+      else { camera.position.copy(home); camera.rotation.set(0, 0, 0); camera.lookAt(0, 4.1, -10); }
+      for (const w of wordObjs) w.visible = !look;
+    }
+    renderer.domElement.addEventListener('pointerdown', (e) => { if (look) drag = { x: e.clientX, y: e.clientY, yaw, pitch }; });
+    addEventListener('pointerup', () => { drag = null; });
+    addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      const k = (camera.fov * Math.PI / 180) / innerHeight;
+      yaw = drag.yaw + (e.clientX - drag.x) * k; pitch = Math.max(-0.4, Math.min(1.55, drag.pitch + (e.clientY - drag.y) * k));
+      aimLook();
+    });
+    window.lookAt = (yawDeg, pitchDeg) => { setLook(true); yaw = yawDeg * Math.PI / 180; pitch = pitchDeg * Math.PI / 180; aimLook(); };
+    setLook(q.get('look') === '1');
+    document.body.addEventListener('wheel', (e) => { if (!look) return; camera.fov = Math.max(10, Math.min(100, camera.fov * (e.deltaY > 0 ? 1.08 : 0.93))); camera.updateProjectionMatrix(); });
+
+    // labels: bright-star names and compass marks (projected each frame)
+    const labels = document.getElementById('labels');
+    let showNames = q.get('names') === '1', showLines = opts.lines;
+    const bin = atob(STARS_B64);
+    const named = NAMES.map(([i, name]) => {
+      const p = i * 6, r = bin.charCodeAt(p) | (bin.charCodeAt(p + 1) << 8), d = bin.charCodeAt(p + 2) | (bin.charCodeAt(p + 3) << 8);
+      const el = document.createElement('div'); el.className = 'nm'; el.textContent = name; labels.appendChild(el);
+      return { ra: r / 65536 * 360, dec: (d / 65535 - 0.5) * 180, el };
+    });
+    const compass = [['N', 0], ['NE', 45], ['E', 90], ['SE', 135], ['S', 180], ['SW', 225], ['W', 270], ['NW', 315]].map(([t, az]) => {
+      const el = document.createElement('div'); el.className = 'cp'; el.textContent = t; labels.appendChild(el); return { az, el };
+    });
+    const v3 = new THREE.Vector3();
+    function project(dir, el) {
+      v3.copy(dir).multiplyScalar(80).add(camera.position).project(camera);
+      const vis = v3.z < 1 && Math.abs(v3.x) < 1.1 && Math.abs(v3.y) < 1.1;
+      el.style.display = vis ? '' : 'none';
+      if (vis) el.style.left = ((v3.x + 1) / 2 * innerWidth) + 'px', el.style.top = ((1 - v3.y) / 2 * innerHeight) + 'px';
+    }
+    function updateLabels() {
+      for (const n of named) { if (!showNames) { n.el.style.display = 'none'; continue; } stars.equatorialToWorld(n.ra, n.dec, v3); if (v3.y < 0) { n.el.style.display = 'none'; continue; } project(v3, n.el); }
+      for (const c of compass) { if (!look && !showNames) { c.el.style.display = 'none'; continue; } stars.horizonToWorld(0, c.az, v3); project(v3, c.el); }
+    }
+
+    addEventListener('keydown', (e) => {
+      if (e.key === 'l' || e.key === 'L') { showLines = !showLines; stars.setLines(showLines); }
+      if (e.key === 'n' || e.key === 'N') showNames = !showNames;
+      if (e.key === 'o' || e.key === 'O') setLook(!look);
+    });
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight); cssR.setSize(innerWidth, innerHeight);
+      stars.resize(innerWidth, innerHeight); if (sky) sky.resize(innerWidth, innerHeight);
+    });
+    window.setLook = setLook;
+
+    // timing: CPU cost of stars.update, GPU cost estimate via gl.finish() with / without the stars
+    window.measure = async (ms = 1500) => {
+      let n = 0; const t0 = performance.now();
+      await new Promise((res) => { const f = () => { n++; if (performance.now() - t0 < ms) requestAnimationFrame(f); else res(); }; requestAnimationFrame(f); });
+      const gl = renderer.getContext();
+      let upd = 0;
+      const timeRender = (vis) => {
+        stars.group.visible = vis; gl.finish();
+        const a = performance.now();
+        for (let i = 0; i < 30; i++) { const u = performance.now(); stars.update(clock.elapsedTime + i * 0.016, 0.016); upd += performance.now() - u; renderer.render(scene, camera); }
+        gl.finish(); stars.group.visible = true; return (performance.now() - a) / 30;
+      };
+      timeRender(true); upd = 0;
+      const withS = timeRender(true), updMs = upd / 30, without = timeRender(false);
+      renderer.info.autoReset = false; renderer.info.reset(); stars.group.visible = false; renderer.render(scene, camera);
+      const callsWithout = renderer.info.render.calls; renderer.info.reset(); stars.group.visible = true; renderer.render(scene, camera);
+      const callsWith = renderer.info.render.calls; renderer.info.autoReset = true;
+      return { fps: +(n / (ms / 1000)).toFixed(1), renderWithStarsMs: +withS.toFixed(3), renderWithoutMs: +without.toFixed(3),
+               starsUpdateMs: +updMs.toFixed(4), starsDrawCalls: callsWith - callsWithout, initMs: +initMs.toFixed(1),
+               size: [innerWidth, innerHeight, renderer.getPixelRatio()], errors: window.__errors };
+    };
+
+    const hud = document.getElementById('hud');
+    const fmt = new Intl.DateTimeFormat('en-GB', { timeZone: 'Europe/Warsaw', dateStyle: 'medium', timeStyle: 'short' });
+    let hudT = 0;
+    const clock = { elapsedTime: 0, last: performance.now(), getDelta() { const n = performance.now(), d = (n - this.last) / 1000; this.last = n; this.elapsedTime += d; return d; } };
+    renderer.setAnimationLoop(() => {
+      const dt = clock.getDelta(), t = clock.elapsedTime;
+      if (sky) sky.update(t, dt);
+      stars.update(t, dt);
+      renderer.render(scene, camera);
+      cssR.render(scene, camera);
+      updateLabels();
+      if (t - hudT > 0.5) {
+        hudT = t;
+        hud.textContent = `Warsaw ${fmt.format(new Date(stars.skyTimeMs()))}   LST ${(stars.lstDeg() / 15).toFixed(2)} h   facing ${stars.facingAzDeg}°   init ${initMs.toFixed(0)} ms` +
+          `   [O] look ${look ? 'on' : 'off'}  [L] lines  [N] names`;
+      }
+    });
+  </script>
+</body>
+</html>
