@@ -6,8 +6,9 @@
                              direction, phase, illumination, placement, sunDirection, radius, distance }
     direction     unit Vector3 toward the moon (world, from the camera). The SAME object is updated
                   in place whenever the moon glides or moves, so others may keep a reference.
-    phase         0 new .. 0.25 first quarter .. 0.5 full .. 0.75 last quarter (real, or opts.phase)
-    illumination  lit fraction 0..1 of what is shown
+    phase         0 new .. 0.25 first quarter .. 0.5 full .. 0.75 last quarter, AS DISPLAYED
+                  (real, or opts.phase, widened to minIllumination)
+    illumination  lit fraction 0..1 of what is shown (>= minIllumination)
     placement     'real' (at its true alt/az) or 'artistic' (the composed spot), see PLACEMENT
 
   opts {
@@ -15,7 +16,9 @@
     phase,                  // optional fixed phase (bench, art direction); disables the real sky
     latitudeDeg = 52.2, longitudeDeg = 21.0,   // where the visitor stands (stars.js defaults)
     facingAzDeg = 120,      // compass azimuth of world -z; pass stars.facingAzDeg
-    azimuthDeg = 21, altitudeDeg = 18.5,       // the artistic spot, relative to the view (0 = -z, + right)
+    azimuthDeg = 17, altitudeDeg = 22,         // the artistic spot, relative to the view (0 = -z, + right)
+    minIllumination = 0.3,  // "real, but never thin": a thinner moon is shown this lit, waxing or
+                            // waning as it really is (also at its real place); 0 shows the true sliver
     angularSizeDeg = 2.2,   // about 4x the real 0.52 deg, for drama
     distance = 80,          // metres; inside the sky dome (90) and the stars (88); camera far is 400
     tiltDeg,                // force lunar north's tilt from screen up (else the real one)
@@ -29,8 +32,9 @@
     hour, in the compass frame shared with stars.js) whenever that place is well framed: at least
     minAltitudeDeg (12 deg) high, so clear of the treeline and the Tatras (land tops out near 10 deg),
     and inside the frame with a margin of ~1.5 moon diameters + 4 % at the sides and the top.
-    Otherwise it hangs at the ARTISTIC spot (upper right, 21 deg right of centre, 18.5 deg up,
-    balancing the fire at the lower left; pulled inward on narrow viewports).
+    Otherwise it hangs at the ARTISTIC spot (upper right, 17 deg right of centre, 22 deg up, clear
+    of the top string and the birches, balancing the fire at the lower left; pulled inward on
+    narrow viewports).
     Small moves glide (6 s time constant); a jump of more than 2.5 deg cross-fades (out 1.6 s, in 2.4 s).
     Facing ESE (120 deg) the real moon is framed only for an hour or two on some days (e.g. a
     first-quarter moon low in the SE at dusk, a waning moon rising in the E after midnight), so
@@ -67,8 +71,9 @@ import * as THREE from 'three';
 const DEFAULTS = {
   date: null,
   phase: undefined,
-  azimuthDeg: 21,
-  altitudeDeg: 18.5,
+  azimuthDeg: 17,
+  altitudeDeg: 22,
+  minIllumination: 0.3,  // never thinner than this: a thinner real moon is shown at this, same side
   angularSizeDeg: 2.2,
   distance: 80,
   tiltDeg: -14,
@@ -110,33 +115,43 @@ export function moonPhase(date) {
 }
 
 // ------------------------------------------------- the near side, by hand
-// Maria: lat, lon (deg), radius (deg of arc), darkness 0..1, basin ring height (moon radii).
-// Large irregular ones (Procellarum, Frigoris, Tranquillitatis, Fecunditatis) are several blobs.
+// Maria: lat, lon (deg), radius (deg of arc), darkness 0..1, basin ring height (moon radii),
+// hue (-1 bluish, high-titanium basalt .. +1 brownish), shore hue (added near the edge only), sea id.
+// Each sea is traced by several blobs along its real outline (consecutive, same sea id): the blobs
+// of one sea merge into one body, while separate seas only meet where they really touch.
 const MARIA = [
-  // Imbrium and its ring (Apennines, Carpathians, Alps)
-  [33.5, -16.5, 17.0, 0.55, 0.0032], [40.0, -24.0, 9.0, 0.55, 0],
-  // Serenitatis (lighter middle), Tranquillitatis (darkest), Crisium, Fecunditatis, Nectaris
-  [27.5, 17.5, 10.5, 0.45, 0.0022],
-  [8.0, 28.0, 9.5, 0.85, 0], [12.0, 37.0, 7.0, 0.85, 0], [3.0, 22.0, 6.0, 0.8, 0], [15.0, 25.0, 5.0, 0.8, 0],
-  [17.0, 59.0, 8.6, 0.7, 0.0022],
-  [-5.0, 50.5, 8.5, 0.65, 0], [-13.0, 53.0, 6.0, 0.65, 0], [2.0, 55.0, 4.5, 0.6, 0],
-  [-15.2, 35.0, 5.4, 0.6, 0.0016],
-  // Nubium, Humorum, Cognitum, Insularum, Vaporum, Sinus Medii, Sinus Aestuum
-  [-21.0, -16.0, 9.5, 0.3, 0], [-24.4, -38.6, 6.2, 0.65, 0.0016],
-  [-10.0, -23.0, 5.5, 0.4, 0], [7.5, -31.0, 8.0, 0.55, 0], [13.3, 4.5, 3.0, 0.3, 0],
-  [11.5, -7.0, 2.3, 0.4, 0], [21.0, -1.0, 2.6, 0.3, 0],
-  // Oceanus Procellarum: a broad sprawl down the west
-  [30.0, -55.0, 12.0, 0.7, 0], [18.0, -58.0, 13.0, 0.7, 0], [5.0, -55.0, 12.0, 0.65, 0],
-  [-5.0, -48.0, 10.0, 0.6, 0], [-12.0, -42.0, 6.5, 0.55, 0], [10.0, -70.0, 8.0, 0.6, 0],
-  [42.0, -55.0, 9.0, 0.6, 0], [22.0, -44.0, 10.0, 0.7, 0], [52.0, -62.0, 6.0, 0.55, 0],
-  [10.0, -42.0, 10.0, 0.65, 0], [33.0, -40.0, 8.0, 0.65, 0], [25.0, -66.0, 10.0, 0.6, 0],
-  [-2.0, -38.0, 7.0, 0.55, 0], [16.0, -30.0, 6.0, 0.55, 0],
+  // Imbrium: the round basin, Sinus Iridum bay to the NW, Apennine and Carpathian shores
+  [33.0, -16.0, 14.0, 0.5, 0.0032, 0.15, 0, 0], [38.0, -26.0, 8.0, 0.55, 0, 0.0, 0, 0], [44.5, -31.0, 4.0, 0.5, 0, 0.1, 0, 0],
+  [26.0, -21.0, 7.0, 0.6, 0, -0.3, 0, 0], [29.0, -6.0, 7.0, 0.45, 0, 0.3, 0, 0], [41.0, -10.0, 6.0, 0.5, 0, 0.2, 0, 0],
+  [36.0, 0.5, 4.0, 0.45, 0, 0.3, 0, 0],
+  // Serenitatis (1): round, lighter in the middle, a dark brownish rim; Tranquillitatis (2): darkest, bluish, lobed
+  [28.0, 17.5, 9.5, 0.3, 0.0022, 0.35, 0.9, 1], [21.0, 13.0, 3.5, 0.6, 0, 0.6, 0, 1],
+  [8.5, 29.0, 7.0, 0.9, 0, -0.8, 0, 2], [13.0, 36.0, 5.5, 0.9, 0, -0.8, 0, 2], [2.0, 22.5, 4.5, 0.85, 0, -0.7, 0, 2],
+  [16.0, 26.0, 4.0, 0.85, 0, -0.6, 0, 2], [-1.0, 31.0, 4.5, 0.85, 0, -0.7, 0, 2], [5.0, 40.0, 4.0, 0.85, 0, -0.7, 0, 2],
+  [-5.0, 25.5, 2.8, 0.8, 0, -0.5, 0, 2], [19.0, 33.0, 3.0, 0.8, 0, -0.6, 0, 2],
+  // Crisium (isolated oval), Fecunditatis (long, irregular), Nectaris (small, round)
+  [17.0, 59.0, 8.0, 0.7, 0.0022, -0.1, 0.3, 3], [15.0, 64.0, 4.5, 0.7, 0, -0.1, 0, 3],
+  [-3.0, 50.5, 5.0, 0.65, 0, -0.3, 0, 4], [-9.0, 52.0, 5.5, 0.65, 0, -0.3, 0, 4], [-15.0, 55.0, 4.0, 0.6, 0, -0.2, 0, 4],
+  [-4.0, 57.5, 3.5, 0.6, 0, -0.2, 0, 4], [-12.0, 47.5, 3.5, 0.6, 0, -0.2, 0, 4], [3.0, 54.5, 3.0, 0.6, 0, -0.2, 0, 4],
+  [-15.2, 35.0, 5.0, 0.55, 0.0016, 0.1, 0.2, 5],
+  // Nubium (pale), Humorum, Cognitum, Insularum, Vaporum, Sinus Aestuum, Palus Putredinis
+  [-19.0, -15.0, 6.5, 0.3, 0, 0.2, 0, 6], [-25.0, -12.0, 4.5, 0.3, 0, 0.2, 0, 6], [-22.0, -22.0, 4.5, 0.35, 0, 0.1, 0, 6],
+  [-24.4, -38.6, 5.8, 0.65, 0.0016, 0.0, 0.3, 7],
+  [-10.0, -23.0, 4.5, 0.4, 0, -0.2, 0, 8], [7.5, -31.0, 6.0, 0.5, 0, -0.3, 0, 9], [3.0, -26.0, 3.5, 0.45, 0, -0.2, 0, 9],
+  [13.3, 4.5, 2.8, 0.35, 0, 0.3, 0, 10], [11.5, -7.0, 2.3, 0.45, 0, 0.1, 0, 11], [25.0, 0.5, 2.6, 0.35, 0, 0.3, 0, 12],
+  // Oceanus Procellarum: a broad, ragged sprawl down the west, bluish in places
+  [30.0, -55.0, 10.0, 0.65, 0, -0.4, 0, 13], [18.0, -58.0, 11.0, 0.7, 0, -0.6, 0, 13], [5.0, -55.0, 10.0, 0.6, 0, -0.3, 0, 13],
+  [-5.0, -48.0, 8.5, 0.55, 0, -0.2, 0, 13], [-12.0, -42.0, 5.5, 0.5, 0, -0.1, 0, 13], [10.0, -70.0, 7.0, 0.6, 0, -0.4, 0, 13],
+  [42.0, -55.0, 7.5, 0.6, 0, -0.2, 0, 13], [22.0, -44.0, 8.5, 0.7, 0, -0.5, 0, 13], [52.0, -62.0, 5.0, 0.55, 0, -0.1, 0, 13],
+  [10.0, -42.0, 8.5, 0.6, 0, -0.4, 0, 13], [33.0, -40.0, 7.0, 0.6, 0, -0.3, 0, 13], [25.0, -66.0, 8.5, 0.6, 0, -0.4, 0, 13],
+  [-2.0, -38.0, 6.0, 0.5, 0, -0.2, 0, 13], [16.0, -30.0, 5.0, 0.5, 0, -0.2, 0, 13], [-8.0, -60.0, 5.0, 0.55, 0, -0.2, 0, 13],
+  [36.0, -63.0, 6.0, 0.55, 0, -0.2, 0, 13], [0.0, -65.0, 5.0, 0.55, 0, -0.3, 0, 13],
   // Mare Frigoris: the long thin band in the north
-  [57.0, -35.0, 5.0, 0.45, 0], [57.5, -18.0, 5.0, 0.45, 0], [57.0, -2.0, 5.0, 0.45, 0],
-  [56.0, 14.0, 4.8, 0.45, 0], [55.0, 30.0, 4.0, 0.45, 0], [60.0, -48.0, 4.0, 0.4, 0],
-  // Lacus Somniorum, Mare Vaporum north, the eastern limb (Marginis, Smythii, Australe), Grimaldi floor
-  [37.0, 30.0, 4.5, 0.35, 0], [13.0, 86.0, 4.5, 0.5, 0], [1.5, 87.0, 5.5, 0.55, 0],
-  [-40.0, 88.0, 6.0, 0.45, 0], [-5.2, -68.6, 2.6, 0.9, 0], [56.8, 81.5, 3.5, 0.5, 0],
+  [57.0, -35.0, 4.5, 0.45, 0, 0.1, 0, 14], [57.5, -18.0, 4.5, 0.45, 0, 0.1, 0, 14], [57.0, -2.0, 4.5, 0.45, 0, 0.1, 0, 14],
+  [56.0, 14.0, 4.3, 0.45, 0, 0.1, 0, 14], [55.0, 30.0, 3.6, 0.45, 0, 0.1, 0, 14], [60.0, -48.0, 3.6, 0.4, 0, 0.1, 0, 14],
+  // Lacus Somniorum, the eastern limb (Marginis, Smythii, Australe), Grimaldi floor, Humboldtianum
+  [37.0, 30.0, 4.0, 0.35, 0, 0.2, 0, 15], [13.0, 86.0, 4.0, 0.5, 0, 0.0, 0, 16], [1.5, 87.0, 5.0, 0.55, 0, 0.0, 0, 17],
+  [-40.0, 88.0, 5.5, 0.45, 0, 0.0, 0, 18], [-5.2, -68.6, 2.6, 0.9, 0, -0.2, 0, 19], [56.8, 81.5, 3.2, 0.5, 0, 0.0, 0, 20],
 ];
 
 // Named craters: lat, lon (deg), radius (deg of arc), then
@@ -231,7 +246,7 @@ const BAKE_FRAG = /* glsl */ `
   #define PI 3.14159265
   varying vec2 vUv;
   uniform vec4 uMaria[NM];   // lat, lon, radius (rad), darkness
-  uniform float uRing[NM];   // basin ring height
+  uniform vec4 uMariaB[NM];  // ring height, hue, shore hue, sea id
   uniform vec4 uCrA[NC];     // lat, lon, radius (rad), fresh
   uniform vec4 uCrB[NC];     // rays (rad), floor, dark floor, seed
   uniform float uLonSpan, uTexel;
@@ -259,59 +274,73 @@ const BAKE_FRAG = /* glsl */ `
     float lat = (vUv.y - 0.5) * PI;
     vec3 p = dirOf(lat, lon);
 
-    // ---- maria: metaballs (so neighbours merge into one sea), a warped domain, a noisy threshold
+    // ---- maria: metaballs traced along the real outlines, a warped domain, a ragged threshold
     vec3 pw = normalize(p + 0.07 * (vec3(fbm(p * 3.0 + 1.0), fbm(p * 3.0 + 7.0), fbm(p * 3.0 + 13.0)) - 0.5));
-    pw = normalize(pw + 0.045 * (vec3(fbm(p * 7.0 + 2.0), fbm(p * 7.0 + 5.0), fbm(p * 7.0 + 9.0)) - 0.5));
-    pw = normalize(pw + 0.02 * (vec3(vnoise(p * 19.0 + 2.0), vnoise(p * 19.0 + 5.0), vnoise(p * 19.0 + 9.0)) - 0.5));
+    pw = normalize(pw + 0.035 * (vec3(fbm(p * 8.0 + 2.0), fbm(p * 8.0 + 5.0), fbm(p * 8.0 + 9.0)) - 0.5));
+    pw = normalize(pw + 0.022 * (vec3(vnoise(p * 21.0 + 2.0), vnoise(p * 21.0 + 5.0), vnoise(p * 21.0 + 9.0)) - 0.5));
     float edgeN = fbm(p * 6.0 + 3.0) - 0.5;
     float edgeN2 = fbm(p * 17.0 + 11.0) - 0.5;
-    float edgeN3 = vnoise(p * 55.0 + 5.0) - 0.5;
-    float field = 0.0, fmax = 0.0, darkSum = 0.0, wSum = 0.0, ring = 0.0;
-    float nRel = edgeN * 0.62 + edgeN2 * 0.30 + edgeN3 * 0.07;
+    float field = 0.0, seaSum = 0.0, seaMax = 0.0, seaId = -1.0;
+    float darkSum = 0.0, hueSum = 0.0, wSum = 0.0, ring = 0.0, ridgeC = 0.0;
+    float nAbs = (edgeN * 0.55 + edgeN2 * 0.28) * 0.07;   // shore noise in radians (~4 deg)
     for (int i = 0; i < NM; i++) {
       vec4 m = uMaria[i];
+      vec4 mb = uMariaB[i];
       vec3 c = dirOf(m.x, m.y);
       float d0 = acos(clamp(dot(pw, c), -1.0, 1.0)) / m.z;
-      float d = max(d0 + nRel * mix(1.0, 0.6, smoothstep(4.0, 12.0, m.z * 57.3)), 0.0);
+      float d = max(d0 + nAbs / m.z, 0.0);
       float d2 = d * d;
-      float k = 1.0 / (1.0 + d2 * d2 * d2 * d2);       // 0.5 at the nominal radius
-      field += k; fmax = max(fmax, k);
+      float k = 1.0 / (1.0 + d2 * d2 * d2);            // 0.5 at the nominal radius, soft tail
+      if (mb.w != seaId) {                               // a new sea: settle the previous one
+        field = max(field, seaMax + 0.6 * (seaSum - seaMax));
+        seaSum = 0.0; seaMax = 0.0; seaId = mb.w;
+      }
+      seaSum += k; seaMax = max(seaMax, k);
       darkSum += k * m.w; wSum += k;
-      if (uRing[i] > 0.0) {
+      hueSum += k * (mb.y + mb.z * smoothstep(0.55, 0.95, d0));
+      if (mb.x > 0.0) {
         float rr = (d0 - 1.08) / 0.11;
-        float mtn = fbm(p * 42.0 + float(i)) ;
-        ring += uRing[i] * exp(-rr * rr) * smoothstep(0.35, 0.75, mtn) * (0.6 + 0.8 * mtn);
+        float mtn = fbm(p * 42.0 + float(i));
+        ring += mb.x * exp(-rr * rr) * smoothstep(0.35, 0.75, mtn) * (0.6 + 0.8 * mtn);
+        // concentric wrinkle ridges inside ringed basins
+        float rc = (d0 - 0.72 - 0.08 * edgeN2) / 0.035;
+        ridgeC = max(ridgeC, exp(-rc * rc) * smoothstep(0.3, 0.7, vnoise(p * 30.0 + float(i))));
       }
     }
     float dark = wSum > 0.0 ? darkSum / wSum : 0.0;
-    field = fmax + 0.25 * (field - fmax);                // neighbours merge a little, not into one ocean
-    float shore = 0.36 * (fbm(p * 30.0 + 21.0) - 0.5) + 0.2 * (vnoise(p * 95.0 + 3.0) - 0.5);
-    float mare = smoothstep(0.2, 0.74, field + shore);
+    float hue = wSum > 0.0 ? hueSum / wSum : 0.0;
+    field = max(field, seaMax + 0.6 * (seaSum - seaMax));
+    // ragged shores: embayments and highland 'islands' at several scales
+    float shore = 0.34 * (fbm(p * 26.0 + 21.0) - 0.5) + 0.22 * (fbm(p * 60.0 + 3.0) - 0.5)
+                - 0.18 * pow(vnoise(p * 14.0 + 8.0), 4.0);
+    float mare = smoothstep(0.24, 0.72, field + shore);
 
-    // ---- base terrain: rolling highlands, flat maria a little lower with faint wrinkle ridges
-    float hl = (fbm(p * 5.0) - 0.5) * 0.0050 + (fbm(p * 23.0 + 5.0) - 0.5) * 0.0026 + (vnoise(p * 90.0) - 0.5) * 0.0005;
-    float wr = 1.0 - abs(fbm(p * 14.0 + 2.0) * 2.0 - 1.0);
-    float mh = -0.0012 + 0.00016 * pow(wr, 3.0) + (vnoise(p * 60.0) - 0.5) * 0.00008;
+    // ---- base terrain: rough highlands; maria flat, a little lower, with wrinkle ridges
+    float hl = (fbm(p * 5.0) - 0.5) * 0.0050 + (fbm(p * 23.0 + 5.0) - 0.5) * 0.0028 + (vnoise(p * 90.0) - 0.5) * 0.0006;
+    float wr = pow(1.0 - abs(fbm(pw * 11.0 + 2.0) * 2.0 - 1.0), 7.0);
+    float wr2 = pow(1.0 - abs(vnoise(pw * 26.0 + 7.0) * 2.0 - 1.0), 9.0) * smoothstep(0.4, 0.7, vnoise(p * 9.0));
+    float mh = -0.0012 + 0.00034 * max(wr, ridgeC) + 0.00018 * wr2 + (vnoise(p * 60.0) - 0.5) * 0.00008;
     float h = mix(hl, mh, mare) + ring * (1.0 - mare * 0.85);
 
-    // ---- albedo: highlands bright and mottled, maria dark and varied
-    float aHigh = 0.95 + 0.36 * (fbm(p * 4.0 + 1.7) - 0.5) + 0.22 * (fbm(p * 16.0 + 4.0) - 0.5) + 0.10 * (vnoise(p * 90.0) - 0.5);
-    aHigh *= 1.0 - 0.18 * smoothstep(0.15, 0.4, field) * (1.0 - mare);   // darker 'mantled' shores
-    float flows = (fbm(p * 3.5 + 8.0) - 0.5) + 0.6 * (fbm(p * 9.0 + 4.0) - 0.5);   // lava flows of different ages
-    float aMare = mix(0.56, 0.28, clamp(dark + flows * 1.6, 0.0, 1.0))
-                * (0.9 + 0.34 * (fbm(p * 22.0 + 2.0) - 0.5) + 0.08 * (vnoise(p * 80.0) - 0.5));
-    // a darker rim just inside the shore (as round Serenitatis and Crisium show)
-    aMare *= 1.0 - 0.12 * smoothstep(0.55, 0.75, mare) * (1.0 - smoothstep(0.85, 1.6, field));
+    // ---- albedo: highlands bright and mottled, maria dark with lava-flow tones
+    float aHigh = 1.05 + 0.34 * (fbm(p * 4.0 + 1.7) - 0.5) + 0.24 * (fbm(p * 16.0 + 4.0) - 0.5) + 0.12 * (vnoise(p * 90.0) - 0.5);
+    aHigh *= 1.0 - 0.16 * smoothstep(0.12, 0.42, field) * (1.0 - mare);   // darker 'mantled' shores
+    float flows = (fbm(p * 3.5 + 8.0) - 0.5) + 0.7 * (fbm(pw * 10.0 + 4.0) - 0.5) + 0.3 * (fbm(pw * 28.0 + 1.0) - 0.5);
+    float aMare = mix(0.56, 0.27, clamp(dark + flows * 1.5, 0.0, 1.0))
+                * (0.9 + 0.3 * (fbm(p * 22.0 + 2.0) - 0.5) + 0.08 * (vnoise(p * 80.0) - 0.5));
+    aMare *= 1.0 - 0.10 * smoothstep(0.55, 0.75, mare) * (1.0 - smoothstep(0.85, 1.6, field));
+    aMare *= 1.0 + 0.10 * max(wr, ridgeC);                // ridges catch a little more light
     float alb = mix(aHigh, aMare, mare);
+    hue = clamp(hue + 0.5 * flows, -1.0, 1.0) * mare;
 
     // ---- random craters, seven octaves, in 3D cells on the sphere (no seam, no pinching)
     float freq = 8.0;
-    for (int o = 0; o < 8; o++) {
+    for (int o = 0; o < 9; o++) {
       float cellR = 1.0 / freq;
       if (cellR * 0.3 < uTexel * 1.6) break;          // smaller than the map can show
       // big old craters are buried in the maria; small young ones are everywhere
-      float dens = mix(0.5, 0.95, float(o) / 7.0);
-      float inMare = mix(0.04, 0.4, float(o) / 7.0);
+      float dens = mix(0.75, 1.0, float(o) / 7.0);       // the highlands are saturated with craters
+      float inMare = mix(0.03, 0.32, float(o) / 7.0);
       vec3 q = p * freq;
       vec3 b = floor(q);
       for (int z = -1; z <= 1; z++)
@@ -325,7 +354,7 @@ const BAKE_FRAG = /* glsl */ `
         float pick = hash13(cell * 1.37 + float(o) * 7.7);
         if (pick > dens * mix(1.0, inMare, mare)) continue;
         vec3 cd = cc / lc;
-        float rad = cellR * mix(0.10, 0.36, pow(hash13(cell + 41.0 + float(o)), 1.6));
+        float rad = cellR * mix(0.10, 0.42, pow(hash13(cell + 41.0 + float(o)), 1.6));
         float dd = length(p - cd);
         float rho = dd / rad;
         if (rho > 2.6) continue;
@@ -338,8 +367,9 @@ const BAKE_FRAG = /* glsl */ `
         h += rad * dr * profile(pow(rho, 1.0 / soft), fl, mix(0.06, 0.28, age));
         // fresh craters: bright walls and a bright apron
         alb += fresh * 0.55 * (1.0 - smoothstep(0.3, 2.2, rho));
+        alb += (1.0 - mare) * age * 0.08 * smoothstep(0.75, 1.0, rho) * (1.0 - smoothstep(1.0, 1.3, rho));  // bright rims
       }
-      freq *= 1.72;
+      freq *= 1.62;
     }
 
     // ---- named craters on top (they are younger than the maria they sit in)
@@ -378,7 +408,7 @@ const BAKE_FRAG = /* glsl */ `
     alb += rays * mix(0.7, 1.0, mare);
     alb = clamp(alb, 0.12, 1.55);
 
-    gl_FragColor = vec4(alb * ${A_ENC.toFixed(6)}, 0.5 + h * ${H_ENC.toFixed(1)}, 0.0, 1.0);
+    gl_FragColor = vec4(alb * ${A_ENC.toFixed(6)}, 0.5 + h * ${H_ENC.toFixed(1)}, 0.5 + 0.5 * hue, mare);
   }
 `;
 
@@ -413,7 +443,7 @@ const MOON_FRAG = /* glsl */ `
   precision highp float;
   #define PI 3.14159265
   varying vec3 vN;
-  uniform sampler2D uMap;
+  uniform sampler2D uMap, uAux;
   uniform vec3 uSun, uView;          // unit vectors in the moon's frame
   uniform vec3 uTint, uEarthTint;
   uniform float uGain, uEarth, uLonSpan, uRelief, uStep, uDebug, uFade;
@@ -430,7 +460,10 @@ const MOON_FRAG = /* glsl */ `
     vec4 t = texture2D(uMap, uv);
     float alb = t.r / ${A_ENC.toFixed(6)};
     float h = (t.g - 0.5) / ${H_ENC.toFixed(1)} * uRelief;
-    vec2 g = (t.ba - 0.5) / ${G_ENC.toFixed(3)} * uRelief;
+    // relief fades toward the limb, where foreshortening hides it (and no black specks at full)
+    float muG = max(dot(normalize(vN), uView), 0.0);
+    float limbK = smoothstep(0.06, 0.45, muG);
+    vec2 g = (t.ba - 0.5) / ${G_ENC.toFixed(3)} * uRelief * limbK;
 
     float cl = max(length(vec2(n.x, n.z)), 0.04);
     vec3 E = vec3(n.z, 0.0, -n.x) / cl;            // east
@@ -439,7 +472,7 @@ const MOON_FRAG = /* glsl */ `
 
     float mu0g = dot(n, uSun);                      // geometric sun height
     float mu0 = max(dot(nb, uSun), 0.0);
-    float mu = max(dot(n, uView), 0.03);
+    float mu = max(dot(nb, uView), 0.03);            // the facet's own view angle: a flat full moon
     // Lommel-Seeliger (the flat, bright full moon) with a little Lambert (limb darkening)
     float ls = mu0 / (mu0 + mu + 1e-4);
     float lit = mix(2.0 * ls, mu0, 0.35);
@@ -462,11 +495,16 @@ const MOON_FRAG = /* glsl */ `
         shadow = min(shadow, smoothstep(-soft, soft, ray - hs));
       }
     }
+    shadow = mix(1.0, shadow, limbK);
     float term = smoothstep(-0.035, 0.012, mu0g);   // peaks catch a little light past the terminator
     float day = lit * shadow * term;
 
-    // maria a touch cooler, highlands a touch warmer: still one warm ivory
-    vec3 tint = uTint * mix(vec3(0.94, 0.97, 1.03), vec3(1.02, 1.0, 0.97), smoothstep(0.45, 0.95, alb));
+    // basalt tones: titanium-rich seas a little bluer (Tranquillitatis), others browner (Serenitatis'
+    // rim); highlands a touch warmer. Still one warm ivory overall.
+    vec4 aux = texture2D(uAux, uv);
+    float hue = aux.b * 2.0 - 1.0;
+    vec3 tint = uTint * mix(vec3(0.95, 0.98, 1.02), vec3(1.02, 1.0, 0.97), smoothstep(0.45, 0.95, alb));
+    tint *= mix(vec3(1.0), hue > 0.0 ? vec3(1.07, 0.99, 0.88) : vec3(0.90, 0.97, 1.10), abs(hue) * aux.a);
     vec3 col = tint * uGain * alb * day;
     col += uEarthTint * uEarth * alb * (1.0 - smoothstep(-0.05, 0.1, mu0g) * 0.7);
 
@@ -531,9 +569,10 @@ function bakeSurface(renderer, height) {
   const ext = renderer.extensions;
   const half = caps.isWebGL2 !== false && (ext.has('EXT_color_buffer_float') || ext.has('EXT_color_buffer_half_float'));
   const type = half ? THREE.HalfFloatType : THREE.UnsignedByteType;
+  // rt1 (albedo, height, hue, mare) is kept: the moon reads hue and mare from it
   const rt1 = new THREE.WebGLRenderTarget(w, h, {
-    type, format: THREE.RGBAFormat, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter,
-    depthBuffer: false, stencilBuffer: false, generateMipmaps: false,
+    type, format: THREE.RGBAFormat, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter,
+    depthBuffer: false, stencilBuffer: false, generateMipmaps: true,
   });
   const rt2 = new THREE.WebGLRenderTarget(w, h, {
     type, format: THREE.RGBAFormat, minFilter: THREE.LinearMipmapLinearFilter, magFilter: THREE.LinearFilter,
@@ -543,8 +582,8 @@ function bakeSurface(renderer, height) {
   rt2.texture.wrapS = rt2.texture.wrapT = THREE.ClampToEdgeWrapping;
   rt2.texture.anisotropy = Math.min(4, caps.getMaxAnisotropy ? caps.getMaxAnisotropy() : 1);
 
-  const maria = MARIA.map((m) => new THREE.Vector4(m[0] * DEG, m[1] * DEG, m[2] * DEG, m[3]));
-  const ring = MARIA.map((m) => m[4]);
+  const maria = MARIA.map((m) => new THREE.Vector4(m[0] * DEG, m[1] * DEG, m[2] * 1.12 * DEG, m[3]));
+  const mariaB = MARIA.map((m) => new THREE.Vector4(m[4], m[5], m[6], m[7]));
   const crA = CRATERS.map((c) => new THREE.Vector4(c[0] * DEG, c[1] * DEG, c[2] * DEG, c[3]));
   const crB = CRATERS.map((c, i) => new THREE.Vector4(c[4] * DEG, c[5], c[6], 3.7 + i * 1.913));
 
@@ -552,7 +591,7 @@ function bakeSurface(renderer, height) {
   const bakeMat = new THREE.ShaderMaterial({
     vertexShader: QUAD_VERT, fragmentShader: BAKE_FRAG, depthTest: false, depthWrite: false,
     uniforms: {
-      uMaria: { value: maria }, uRing: { value: ring }, uCrA: { value: crA }, uCrB: { value: crB },
+      uMaria: { value: maria }, uMariaB: { value: mariaB }, uCrA: { value: crA }, uCrB: { value: crB },
       uLonSpan: { value: LON_SPAN }, uTexel: { value: Math.PI / h },
     },
   });
@@ -579,8 +618,8 @@ function bakeSurface(renderer, height) {
     renderer.setRenderTarget(prevTarget);
     if (renderer.xr) renderer.xr.enabled = prevXR;
   }
-  geo.dispose(); bakeMat.dispose(); slopeMat.dispose(); rt1.dispose();
-  return { target: rt2, width: w, height: h };
+  geo.dispose(); bakeMat.dispose(); slopeMat.dispose();
+  return { target: rt2, aux: rt1, width: w, height: h };
 }
 
 // ------------------------------------------------------- where things are
@@ -677,6 +716,13 @@ export function createMoon(ctx, opts = {}) {
     const ph = moonPhase(date);
     sky.phase = override ? ((o.phase % 1) + 1) % 1 : ph.phase;
     sky.elong = sky.phase <= 0.5 ? sky.phase * 2 * Math.PI : (1 - sky.phase) * 2 * Math.PI;
+    // never thin: widen to the minimum lit fraction, keeping the real waxing / waning side
+    const kMin = THREE.MathUtils.clamp(+o.minIllumination || 0, 0, 1);
+    const eMin = Math.acos(1 - 2 * kMin);
+    if (sky.elong < eMin) {
+      sky.elong = eMin;
+      sky.phase = sky.phase <= 0.5 ? eMin / (2 * Math.PI) : 1 - eMin / (2 * Math.PI);
+    }
     sky.illum = (1 - Math.cos(sky.elong)) / 2;
     if (override) {
       // the bench: the set sun lower right while waxing, lower left while waning
@@ -788,6 +834,7 @@ export function createMoon(ctx, opts = {}) {
     toneMapped: false,
     uniforms: {
       uMap: { value: baked.target.texture },
+      uAux: { value: baked.aux.texture },
       uSun: { value: new THREE.Vector3() },
       uView: { value: new THREE.Vector3() },
       uTint: { value: ivory.clone() },
@@ -953,7 +1000,7 @@ export function createMoon(ctx, opts = {}) {
     moonGeo.dispose(); moonMat.dispose();
     if (haloGeo) haloGeo.dispose();
     if (haloMat) haloMat.dispose();
-    baked.target.dispose();
+    baked.target.dispose(); baked.aux.dispose();
   }
 
   // for the bench: show the sky of any moment (setTimeOfDay always uses today)

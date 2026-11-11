@@ -5,6 +5,7 @@
   URL params:
     view=close|scene   close-up (drag to orbit, wheel to zoom) or the site camera with sky.js behind
     moonphase=0..1     phase override (0 new, 0.25 first quarter, 0.5 full, 0.75 last quarter)
+    minillum=0..1      never thinner than this lit fraction (default 0.3; 0 shows the true sliver)
     date=ISO           the date whose real phase is shown (default: now)
     size=deg az=deg alt=deg tilt=deg relief=N tex=N (baked map height)   moon options
     rm=1               reduced motion       labels=0   no test words in scene view
@@ -96,6 +97,7 @@
     const opts = {
       date, phase: num('moonphase'), azimuthDeg: num('az'), altitudeDeg: num('alt'), angularSizeDeg: num('size'),
       tiltDeg: num('tilt'), relief: num('relief'), textureHeight: num('tex') ?? (view === 'close' ? 1536 : undefined),
+      minIllumination: num('minillum'),
       followCamera: view === 'scene', followRealSky: view === 'scene' && q.get('real') !== '0',
       facingAzDeg: stars && Number.isFinite(stars.facingAzDeg) ? stars.facingAzDeg : 120,
     };
