@@ -60,7 +60,7 @@
     let strings;
     function build() {
       if (strings) strings.dispose();
-      strings = createStrings({ scene, camera, renderer, reducedMotion: reduced, readToken }, { count: 5, extents: { xMin: -22, xMax: 22, yMin: 1.5, yMax: 10, zMin: -14, zMax: 2 }, firePosition: new THREE.Vector3(-3, 0.6, -2) });
+      strings = createStrings({ scene, camera, renderer, reducedMotion: reduced, readToken }, { count: Math.round(Number(readToken('--strings-count', 6)) || 6), extents: { xMin: -22, xMax: 22, yMin: 1.5, yMax: 10, zMin: -14, zMax: 2 }, firePosition: new THREE.Vector3(-3, 0.6, -2) });
       window.__strings = strings;
     }
     build();
@@ -74,11 +74,11 @@
     });
     const tmp = new THREE.Vector3();
 
-    const clock = new THREE.Clock();
+    let last = performance.now();
     let t = 0, frameMs = 0, frames = 0;
     window.__stats = { touches: 0 };
     function tick() {
-      const dt = Math.min(clock.getDelta(), 0.1); t += dt;
+      const nowMs = performance.now(); const dt = Math.min((nowMs - last) / 1000, 0.1); last = nowMs; t += dt;
       const t0 = performance.now();
       strings.update(t, dt);
       for (const w of words) {
