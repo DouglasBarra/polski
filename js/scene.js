@@ -318,7 +318,8 @@ function moduleTable() {
     ["foreground", "createForeground", () => ({ firePosition: v(TUNE.firePos), wind })],
     ["strings", "createStrings", () => ({
       count: Math.max(1, Math.round(Number(readToken("--strings-count", 6)) || 6)),
-      extents: Object.assign({}, TUNE.stringExtents)
+      extents: Object.assign({}, TUNE.stringExtents),
+      firePosition: v([TUNE.firePos[0], TUNE.firePos[1] + 0.7, TUNE.firePos[2]])   // the glow follows the fire
     })],
     ["fire", "createFire", () => ({ position: v(TUNE.firePos), scale: TUNE.fireScale })]
   ];
@@ -331,7 +332,16 @@ function loadModules() {
   disposeModules();
   // Sky first, so it is behind everything that is added later.
   loadModule("sky", "createSky", { horizonY: 0, radius: 90 }, epoch)
-    .then(() => Promise.all(moduleTable().map(([name, factory, opts]) => loadModule(name, factory, opts(), epoch))));
+    .then(() => {
+      // The moon follows the stars (it may want their compass frame); the rest in parallel.
+      const table = moduleTable(), byName = {};
+      for (const row of table) byName[row[0]] = row;
+      const load = (name) => loadModule(name, byName[name][1], byName[name][2](), epoch);
+      return Promise.all([
+        load("stars").then(() => load("moon")),
+        ...table.filter((r) => r[0] !== "stars" && r[0] !== "moon").map((r) => load(r[0]))
+      ]);
+    });
 }
 
 // The sky suggests a fog; the core applies it to WebGL and to the far words' color.
@@ -706,7 +716,7 @@ function pluck(w) {
   w.el.classList.add("is-plucked");
 
   if (modules.strings && !reduced) {
-    try { modules.strings.pluckNearest(w.pos, lerp(1, 0.55, w.fog)); } catch (e) { /* ignore */ }
+    try { modules.strings.pluckNearest(w.pos, lerp(1, 0.8, w.fog)); } catch (e) { /* ignore */ }
   }
 
   if (T.durPluck > 0) pluckTimer = setTimeout(() => finishPluck(w), T.durPluck);

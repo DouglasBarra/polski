@@ -43,7 +43,7 @@ One `THREE.Scene` and one `PerspectiveCamera`, drawn by two renderers that share
 - `WebGLRenderer` into `#scene-world`: the night (sky, stars, moon, trees, foreground, strings, fire). Transparent, so the CSS night gradient on `body` shows until the sky draws, and if WebGL is unavailable.
 - `CSS3DRenderer` into `#scene-words`: the words, as real DOM buttons wrapped in `CSS3DSprite`s. Each sprite is scaled so the text is drawn 1:1 (the button's `font-size` is the size on screen), which keeps it crisp. Words are always drawn above the canvas.
 
-World: metres, ground at y = 0. The fire is at (-3, 0, -2), scale 1.3: the focal point, left of centre. The words' band (8% to 62% of the height) must stay legible: nothing bright or busy behind it. The camera sits at (0, 1.6, 12), looks toward -z pitched up about 6.5° (the compass direction of -z is set by the stars module; see below), and only ever translates (pointer parallax and slow breathing, at most about 0.3 m; frozen while a word is held).
+World: metres, ground at y = 0. The fire is at (-3, 0, -2), scale 1.3: the focal point, left of centre. The words' band (8% to 62% of the height) must stay legible: nothing bright or busy behind it. The camera sits at (0, 1.6, 12), looks toward -z pitched up about 6.5° (compass azimuth 120°, ESE), and only ever translates (pointer parallax and slow breathing, at most about 0.3 m; frozen while a word is held).
 
 **Drift.** Words ride one wind along +x (left to right; `--wind-direction: -1` reverses it) at depths from `--depth-near` to `--depth-far`. The wind is the same everywhere, so near words are larger, brighter and faster and far words smaller, dimmer, slower and tinted toward the fog: real parallax. The wind strength wanders (`--wind-gust`), each word bobs gently (`--bob-*`), and words fade in and out over `--fade-edge` of the width at the edges. Left to right was chosen because it is the reading direction: the eye follows without effort, and it does not read as a news ticker.
 
@@ -57,11 +57,13 @@ stars      opts { date, latitudeDeg, longitudeDeg }                             
 moon       opts { date }                                   + { direction, phase, illumination }
 trees      opts { firePosition, wind, seed }               (also exports buildDouglasFir, buildBirch)
 foreground opts { firePosition, wind }
-strings    opts { count, extents }                         + { touch(prevPos, pos), pluckNearest(worldPos, strength), nearestPoint(worldPos) }
+strings    opts { count, extents, firePosition }           + { touch(prevPos, pos), pluckNearest(worldPos, strength), nearestPoint(worldPos) }
 fire       opts { position, scale }                        + { light, intensity() }          // flicker 0..1
 ```
 
 `wind` is the mean wind in m/s along +x. The place is central Poland (52.1° N, 19.4° E); `date` is the visitor's clock at load.
+
+**Compass.** The camera's -z faces azimuth 120° (ESE), fixed (`stars` opts `facingAzDeg` overrides). World +x is azimuth 210° (SSW), +z is 300° (WNW): compass azimuth A is the world direction (sin(A - 120°), 0, -cos(A - 120°)). The stars handle exposes `facingAzDeg` and `horizonToWorld(altDeg, azDeg, outVec3)`. On November evenings Orion rises left of centre; the November sun rises near 124° (ahead) and sets near 236° (behind, to the right, off screen). Load order: sky, then stars, then moon; the others in parallel with the stars.
 
 Who draws what: `sky` the dome, haze, distant land (hills, the Tatras in the haze, a village) and fog; `stars` the stars and the Milky Way; `moon` the moon; `trees` **every tree**: the Douglas-fir treeline about 50 to 56 m out with a dip behind the fire, the side stands at 15 to 35 m and the birches (the sky and the foreground draw no trees); `foreground` the Polish countryside props within about 30 m (fence, wayside shrine, bench, grass, path), mostly low on the screen and at the edges, lit by `fire.light`; `strings` the guitar strings; `fire` the bonfire. Each module's frame budget is about 2 ms.
 
