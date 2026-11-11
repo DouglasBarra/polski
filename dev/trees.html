@@ -1,0 +1,236 @@
+<!DOCTYPE html>
+<!--
+  Iskry · dev/trees.html: test bench for js/scene/trees.js.
+  Serve the repo root (python3 -m http.server) and open /dev/trees.html.
+  Two modes:
+    close-up  (default)  one tree on a turntable, OrbitControls, a fire-like point light, an
+                         optional neutral "inspect" light to judge the modelling.
+    scene     ?mode=scene the real composition: camera (0,1.6,12) -> (0,4.1,-10), fov 40, with
+                         sky.js and fire.js loaded alongside (guarded), fog from the sky.
+  URL params: mode=close|scene, species=fir|birch, age=0..1, lod=0|1|2, h=metres, seed=N,
+    stems=1..3 (birch), inspect=1, rm=1 (reduced motion), nosky=1, nofire=1, nofg=1 (no foreground), gain=N (CSS brightness)
+  window.bench.perf(n) measures the trees' GPU cost (renders with and without them, synced).
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iskry · trees bench</title>
+  <link rel="stylesheet" href="../css/tokens.css">
+  <style>
+    html, body { margin: 0; height: 100%; background: var(--night); overflow: hidden; }
+    #gl { position: fixed; inset: 0; }
+    #ui { position: fixed; left: 10px; top: 10px; font: 12px ui-monospace, monospace; color: #b39a82;
+          background: rgba(19, 13, 10, 0.72); padding: 8px 10px; border-radius: 6px; line-height: 1.9; }
+    #ui label { margin-right: 8px; }
+    #ui select, #ui input { font: inherit; background: #2a1b12; color: #f4e6d0; border: 1px solid #4a3426; }
+    #ui input[type=number] { width: 4.5em; }
+    #hud { position: fixed; left: 10px; bottom: 8px; font: 11px ui-monospace, monospace; color: #8b7563; white-space: pre; }
+    body.scene #ui .close-only { display: none; }
+  </style>
+  <script type="importmap">
+    { "imports": {
+        "three": "../vendor/three/three.module.js",
+        "three/addons/": "../vendor/three/addons/"
+    } }
+  </script>
+</head>
+<body>
+  <div id="gl"></div>
+  <div id="ui">
+    <label>mode <select id="mode"><option value="close">close-up</option><option value="scene">scene camera</option></select></label>
+    <span class="close-only">
+      <label>species <select id="species"><option value="fir">Douglas-fir</option><option value="birch">silver birch</option></select></label>
+      <label>age <input id="age" type="number" min="0" max="1" step="0.05"></label>
+      <label>lod <select id="lod"><option>0</option><option>1</option><option>2</option></select></label>
+      <label>height <input id="h" type="number" min="2" max="40" step="0.5"></label>
+      <label>stems <input id="stems" type="number" min="1" max="3" step="1"></label>
+      <label><input id="inspect" type="checkbox"> inspect light</label>
+    </span>
+    <label>seed <input id="seed" type="number" step="1"></label>
+    <label><input id="wind" type="checkbox" checked> wind</label>
+  </div>
+  <div id="hud"></div>
+  <script type="module">
+    import * as THREE from 'three';
+    // OrbitControls from three/addons when vendored (vendor/three/addons/controls/), else a
+    // minimal drag-to-orbit / wheel-to-zoom stand-in so the bench works either way
+    let OrbitControls;
+    try { ({ OrbitControls } = await import('three/addons/controls/OrbitControls.js')); }
+    catch (e) {
+      OrbitControls = class {
+        constructor(cam, el) {
+          this.object = cam; this.target = new THREE.Vector3(); this.sph = new THREE.Spherical();
+          let drag = null;
+          el.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey }; el.setPointerCapture(e.pointerId); });
+          el.addEventListener('pointerup', () => { drag = null; });
+          el.addEventListener('contextmenu', (e) => e.preventDefault());
+          el.addEventListener('pointermove', (e) => {
+            if (!drag) return;
+            const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+            if (drag.pan) { const k = this.sph.radius * 0.0015; const r = new THREE.Vector3().setFromMatrixColumn(cam.matrix, 0), u = new THREE.Vector3().setFromMatrixColumn(cam.matrix, 1);
+              this.target.addScaledVector(r, -dx * k).addScaledVector(u, dy * k); }
+            else { this.sph.theta -= dx * 0.006; this.sph.phi = Math.min(3.1, Math.max(0.05, this.sph.phi - dy * 0.006)); }
+            this.apply();
+          });
+          el.addEventListener('wheel', (e) => { e.preventDefault(); this.sph.radius *= Math.exp(e.deltaY * 0.001); this.apply(); }, { passive: false });
+        }
+        update() { this.sph.setFromVector3(this.object.position.clone().sub(this.target)); this.apply(); }
+        apply() { this.object.position.setFromSpherical(this.sph).add(this.target); this.object.lookAt(this.target); }
+      };
+    }
+    import { buildDouglasFir, buildBirch, createTreeMaterial, createTrees } from '../js/scene/trees.js';
+
+    const q = new URLSearchParams(location.search);
+    window.__errors = [];
+    addEventListener('error', (e) => window.__errors.push(String(e.message)));
+    const mode = q.get('mode') === 'scene' ? 'scene' : 'close';
+    document.body.classList.toggle('scene', mode === 'scene');
+    const $ = (id) => document.getElementById(id);
+    const P = {
+      species: q.get('species') || 'fir', age: q.has('age') ? +q.get('age') : 0.9, lod: +(q.get('lod') || 0),
+      h: q.has('h') ? +q.get('h') : 0, seed: q.has('seed') ? +q.get('seed') : 7, stems: +(q.get('stems') || 1),
+      inspect: q.get('inspect') === '1', wind: q.get('wind') !== '0',
+    };
+    $('mode').value = mode; $('species').value = P.species; $('age').value = P.age; $('lod').value = P.lod;
+    $('h').value = P.h || ''; $('seed').value = P.seed; $('stems').value = P.stems; $('inspect').checked = P.inspect; $('wind').checked = P.wind;
+    const reload = () => {
+      const u = new URLSearchParams();
+      u.set('mode', $('mode').value); u.set('species', $('species').value); u.set('age', $('age').value);
+      u.set('lod', $('lod').value); if ($('h').value) u.set('h', $('h').value); u.set('seed', $('seed').value);
+      u.set('stems', $('stems').value); if ($('inspect').checked) u.set('inspect', '1'); if (!$('wind').checked) u.set('wind', '0');
+      for (const k of ['rm', 'nosky', 'nofire', 'nofg', 'gain']) if (q.has(k)) u.set(k, q.get(k));
+      location.search = u.toString();
+    };
+    for (const id of ['mode', 'species', 'age', 'lod', 'h', 'seed', 'stems', 'inspect', 'wind']) $(id).addEventListener('change', reload);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.NoToneMapping;
+    renderer.setClearColor(0x000000, 0);
+    $('gl').appendChild(renderer.domElement);
+    if (q.has('gain')) renderer.domElement.style.filter = `brightness(${+q.get('gain') || 4})`;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.05, 400);
+    const css = getComputedStyle(document.documentElement);
+    const readToken = (name, fallback) => {
+      const v = css.getPropertyValue(name).trim();
+      if (!v) return fallback;
+      const n = parseFloat(v);
+      return /^-?[\d.]+(ms|px)?$/.test(v) && !isNaN(n) ? n : v;
+    };
+    const ctx = { scene, camera, renderer, reducedMotion: q.get('rm') === '1', readToken };
+    const modules = [];
+    let treesHandle = null, update = () => {}, info = '';
+
+    if (mode === 'close') {
+      // ------------------------------------------------ close-up turntable
+      scene.background = new THREE.Color('#130d0a');
+      const t0 = performance.now();
+      let geo;
+      if (P.species === 'birch') geo = buildBirch({ height: P.h || 12, stems: P.stems, lean: 0.06, seed: P.seed });
+      else geo = buildDouglasFir({ height: P.h || (P.age < 0.3 ? 7.5 : P.age < 0.7 ? 14 : 19), age: P.age, lod: P.lod, seed: P.seed });
+      const buildMs = performance.now() - t0;
+      const M = createTreeMaterial({ ctx, center: { x: 0, z: 1e4 }, haze: 0, fogAmount: 0, seed: P.seed });
+      M.uniforms.uWindK.value = P.wind ? 1 : 0;
+      const mesh = new THREE.Mesh(geo, M.material);
+      scene.add(mesh);
+      const H = geo.userData.height;
+      // ground disc for scale
+      const ground = new THREE.Mesh(new THREE.CircleGeometry(H * 0.8, 64).rotateX(-Math.PI / 2), new THREE.MeshLambertMaterial({ color: '#2a2018' }));
+      ground.position.y = -0.001; scene.add(ground);
+      // a fire-like light at the bonfire's typical distance, flickering
+      const fire = new THREE.PointLight('#ff9a48', 26, 40, 1.35);
+      fire.position.set(H * 0.35 + 3, 1.2, H * 0.3 + 3);
+      scene.add(fire);
+      const ember = new THREE.Mesh(new THREE.SphereGeometry(0.15, 12, 8), new THREE.MeshBasicMaterial({ color: '#ffb45a' }));
+      ember.position.copy(fire.position); scene.add(ember);
+      if (P.inspect) {
+        scene.add(new THREE.HemisphereLight('#c8d0e0', '#3a2e24', 2.2));
+        const sun = new THREE.DirectionalLight('#fff2e0', 1.8); sun.position.set(-5, 10, 6); scene.add(sun);
+        scene.background = new THREE.Color('#6e7b8c');
+      }
+      camera.position.set(H * 0.55, H * 0.45, H * 0.9);
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.target.set(0, H * 0.45, 0); controls.update();
+      window.view = (x, y, z, tx, ty, tz) => { camera.position.set(x, y, z); controls.target.set(tx, ty, tz); controls.update(); };
+      info = `${geo.userData.species} h ${H.toFixed(1)} m  verts ${geo.userData.vertices}  tris ${geo.userData.triangles}  build ${buildMs.toFixed(1)} ms`;
+      update = (t) => {
+        M.uniforms.uTime.value = ctx.reducedMotion ? 0 : t;
+        const fl = 0.75 + 0.15 * Math.sin(t * 7.1) + 0.1 * Math.sin(t * 13.7 + 1);
+        fire.intensity = 26 * fl;
+      };
+      window.bench = { geo, mesh, M, scene, camera, renderer };
+    } else {
+      // ------------------------------------------------ the real composition
+      camera.position.set(0, 1.6, 12);
+      camera.lookAt(0, 4.1, -10);
+      scene.fog = new THREE.Fog(new THREE.Color('#301d11'), 14, 72);
+      const load = async (name, factory, opts) => {
+        try {
+          const mod = await import(`../js/scene/${name}.js`);
+          const h = mod[factory](ctx, opts);
+          modules.push(h);
+          return h;
+        } catch (e) { console.warn('bench: module', name, 'unavailable', e); return null; }
+      };
+      if (q.get('nosky') !== '1') {
+        const sky = await load('sky', 'createSky', { horizonY: 0, radius: 90 });
+        if (sky && sky.fogColor) { scene.fog.color.copy(sky.fogColor); scene.fog.near = sky.fogNear; scene.fog.far = sky.fogFar; }
+      } else {
+        scene.background = new THREE.Color('#1a120d');
+      }
+      if (q.get('nofire') !== '1') await load('fire', 'createFire', { position: new THREE.Vector3(-3, 0, -2), scale: 1.3 });
+      if (q.get('nofg') !== '1') await load('foreground', 'createForeground', { firePosition: new THREE.Vector3(-3, 0, -2), wind: 0.25,
+        stork: { x: -16, z: -19, height: 6.4 }, shrine: { x: 3.3, z: -3.2, faceX: -1, faceZ: 0.6 } });
+      else { const l = new THREE.PointLight('#ff9a48', 26, 40, 1.35); l.position.set(-3, 1.17, -2); scene.add(l); }
+      const t0 = performance.now();
+      treesHandle = createTrees(ctx, { firePosition: new THREE.Vector3(-3, 0, -2), wind: P.wind ? 0.25 : 0, seed: P.seed });
+      const createMs = performance.now() - t0;
+      modules.push(treesHandle);
+      const s = treesHandle.stats;
+      info = `trees: init ${createMs.toFixed(0)} ms (geometry ${s.buildMs.toFixed(0)} ms)  draw calls ${s.drawCalls}  instances ${s.instances}  verts ${(s.vertices / 1000).toFixed(0)}k`;
+      window.bench = { trees: treesHandle, scene, camera, renderer, modules, THREE };
+    }
+
+    // GPU cost of the trees: render N frames with and without them, synced by a readPixels
+    window.bench.perf = (n = 60) => {
+      const gl = renderer.getContext();
+      const px = new Uint8Array(4);
+      const run = (visible) => {
+        if (treesHandle) treesHandle.group.visible = visible;
+        renderer.render(scene, camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        const t = performance.now();
+        for (let i = 0; i < n; i++) renderer.render(scene, camera);
+        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        return (performance.now() - t) / n;
+      };
+      const a = run(false), b = run(true), c = run(false), d = run(true);
+      if (treesHandle) treesHandle.group.visible = true;
+      return { without: +((a + c) / 2).toFixed(3), with: +((b + d) / 2).toFixed(3), trees: +(((b + d) - (a + c)) / 2).toFixed(3),
+               calls: renderer.info.render.calls, triangles: renderer.info.render.triangles, size: [renderer.domElement.width, renderer.domElement.height] };
+    };
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+      for (const m of modules) if (m.resize) m.resize(innerWidth, innerHeight);
+    });
+    const clock = new THREE.Clock();
+    let fps = 0, acc = 0, frames = 0;
+    renderer.setAnimationLoop(() => {
+      const dt = Math.min(0.1, clock.getDelta()), t = clock.elapsedTime;
+      update(t, dt);
+      for (const m of modules) m.update(t, dt);
+      renderer.render(scene, camera);
+      acc += dt; frames++;
+      if (acc > 1) { fps = frames / acc; acc = 0; frames = 0; }
+      $('hud').textContent = `${info}\n${fps.toFixed(0)} fps  calls ${renderer.info.render.calls}  tris ${(renderer.info.render.triangles / 1000).toFixed(0)}k`;
+    });
+    window.__ready = true;
+  </script>
+</body>
+</html>
