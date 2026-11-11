@@ -137,6 +137,7 @@ Card (inside `#card-root`; the card agent builds everything in it):
 - `isGolden(id)`: at least 5 views on at least 3 separate days. A quiet sign of familiarity, never a score.
 - `entries()` -> `[{ id, count, firstSeen, lastSeen, days, golden }]`, most recently seen first (a fresh copy).
 - `hideTranslation(id)` -> boolean: about 1 in 4, and only for a word first met on an earlier visit day (a gentle "do you remember?").
+- Since 698243b (learning agent, other session): a gentle spaced-return schedule; `record(id, kind)` takes an optional second argument (the kind of exposure), plus `isMet(id)` (caught at least once) and `familiarity(id)` -> `"new" | "returning" | "golden"`. The header of `js/memory.js` is authoritative for the details above.
 - Nothing from memory is ever shown as a number.
 
 Callers:
