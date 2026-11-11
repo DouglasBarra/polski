@@ -1,0 +1,239 @@
+<!DOCTYPE html>
+<!--
+  Iskry · dev/log.html: test bench for js/scene/log.js (the log bench and the guitar).
+  Serve the repo root (python3 -m http.server) and open /dev/log.html.
+  Uses the real camera and the real sky.js / fire.js (and ground / grass / road / fence / trees when
+  they load, guarded); otherwise a stand-in fire light and a flat dark ground. Fog as the core sets it.
+  Views (?cam= or the buttons; drag to orbit, wheel to zoom, in every view but "scene"):
+    scene   the real camera (0, 1.6, 12) looking at (0, 4.1, -10), fov 40
+    near    the bench from a few metres, as a visitor walking up would see it
+    guitar  the guitar's top, bridge and sound hole up close
+    head    the headstock and the tuners
+    end     the sawn end of the log
+    seat    the seat and the bark from above
+  URL params: cam=..., rm=1, nosky=1, nofire=1, others=0 (no other near-world modules), inspect=1 (a neutral
+  white light instead of the fire, to judge modelling), gain=N (CSS brightness), hour=H (time of day for the sky)
+  window.bench: { view(name), measure(), rebuild(rm), log, mods }
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iskry · log bench</title>
+  <link rel="stylesheet" href="../css/tokens.css">
+  <style>
+    html, body { margin: 0; height: 100%; background: var(--night); overflow: hidden; }
+    #gl { position: fixed; inset: 0; }
+    #ui { position: fixed; left: 10px; top: 10px; font: 12px ui-monospace, monospace; color: #b39a82; }
+    #ui button { font: inherit; background: #2a1b12cc; color: #f4e6d0; border: 1px solid #4a3426; border-radius: 4px; padding: 3px 8px; margin-right: 4px; cursor: pointer; }
+    #ui button.on { background: #5a3a24; }
+    #hud { position: fixed; left: 10px; bottom: 8px; font: 11px ui-monospace, monospace; color: #8b7563; white-space: pre; }
+  </style>
+  <script type="importmap">
+    { "imports": {
+        "three": "../vendor/three/three.module.js",
+        "three/addons/": "../vendor/three/addons/"
+    } }
+  </script>
+</head>
+<body>
+  <div id="gl"></div>
+  <div id="ui"></div>
+  <div id="hud"></div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { createLog } from '../js/scene/log.js';
+    import { FIRE, BENCH, GUITAR } from '../js/scene/layout.js';
+
+    const q = new URLSearchParams(location.search);
+    window.__errors = [];
+    addEventListener('error', (e) => window.__errors.push(String(e.message)));
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.NoToneMapping;
+    document.getElementById('gl').appendChild(renderer.domElement);
+    if (q.has('gain')) renderer.domElement.style.filter = `brightness(${+q.get('gain') || 3})`;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.05, 450);
+    scene.fog = new THREE.Fog(new THREE.Color('#301d11'), 14, 72);
+
+    const css = getComputedStyle(document.documentElement);
+    const readToken = (name, fallback) => {
+      const v = css.getPropertyValue(name).trim();
+      if (!v) return fallback;
+      const n = parseFloat(v);
+      return /^-?[\d.]+(ms|px)?$/.test(v) && !isNaN(n) ? n : v;
+    };
+    const ctx = { scene, camera, renderer, reducedMotion: q.get('rm') === '1', readToken };
+    const firePos = new THREE.Vector3(FIRE.x, FIRE.y, FIRE.z);
+    const mods = {};
+    const tryLoad = async (name, factory, opts) => {
+      try { const m = await import(`../js/scene/${name}.js`); mods[name] = m[factory](ctx, opts); if (mods[name].resize) mods[name].resize(innerWidth, innerHeight); }
+      catch (e) { console.warn('dev: ' + name + ' unavailable', e); }
+    };
+
+    // the time of day, as the core computes it (a simple version: night unless ?hour= says otherwise)
+    const hour = q.has('hour') ? +q.get('hour') : 21;
+    const tod = (() => { const d = Math.max(0, 1 - Math.abs(hour - 17.5) / 2.5), w = Math.max(0, 1 - Math.abs(hour - 6.7) / 1.5); const n = Math.max(0, 1 - d - w); return { hour, dusk: d, night: n, dawn: w }; })();
+
+    if (q.get('nosky') !== '1') await tryLoad('sky', 'createSky', { horizonY: 0, radius: 90 });
+    if (mods.sky && mods.sky.setTimeOfDay) mods.sky.setTimeOfDay(tod);
+    if (mods.sky && mods.sky.fogColor) { scene.fog.color.copy(mods.sky.fogColor); scene.fog.near = mods.sky.fogNear; scene.fog.far = mods.sky.fogFar; }
+    if (!mods.sky) {
+      renderer.setClearColor(new THREE.Color(readToken('--night', '#1a120d')), 1);
+      const ground = new THREE.Mesh(new THREE.CircleGeometry(89, 96).rotateX(-Math.PI / 2).translate(0, 0, 12),
+        new THREE.MeshBasicMaterial({ color: '#0d0806', fog: true, depthWrite: false }));
+      ground.renderOrder = -45; scene.add(ground);
+    }
+    const wind = 0.25;
+    if (q.get('others') !== '0') {
+      await Promise.all([
+        tryLoad('trees', 'createTrees', { firePosition: firePos.clone(), wind, seed: 3 }),
+        tryLoad('ground', 'createGround', { firePosition: firePos.clone(), wind }),
+        tryLoad('road', 'createRoad', { firePosition: firePos.clone(), wind }),
+        tryLoad('grass', 'createGrass', { firePosition: firePos.clone(), wind }),
+        tryLoad('fence', 'createFence', { firePosition: firePos.clone(), wind }),
+        tryLoad('foreground', 'createForeground', { firePosition: firePos.clone(), wind }),
+      ]);
+    }
+    if (q.get('nofire') !== '1' && q.get('inspect') !== '1') await tryLoad('fire', 'createFire', { position: firePos.clone(), scale: 1.3 });
+    if (q.get('inspect') === '1') {
+      const l = new THREE.PointLight('#ffffff', 6, 0, 2); l.position.set(BENCH.x + 0.6, 1.4, BENCH.z + 2.2); scene.add(l);
+      const l2 = new THREE.PointLight('#ffffff', 1.5, 0, 2); l2.position.set(BENCH.x - 1.2, 1.0, BENCH.z + 1.0); scene.add(l2);
+    } else if (!mods.fire) {
+      const l = new THREE.PointLight('#ffae62', 30, 60, 2); l.position.set(firePos.x, 0.8, firePos.z); scene.add(l);
+    }
+    for (const k in mods) if (mods[k].setTimeOfDay) mods[k].setTimeOfDay(tod);
+
+    let log = createLog(ctx, { firePosition: firePos.clone(), wind });
+    log.setTimeOfDay(tod);
+    log.resize(innerWidth, innerHeight);
+
+    // ---- views + a small drag-orbit
+    const VIEWS = {
+      scene: { pos: [0, 1.6, 12], look: [0, 4.1, -10], fov: 40 },
+      near: { target: [BENCH.x - 0.05, 0.42, BENCH.z + 0.1], dist: 2.6, az: 0.25, el: 0.22, fov: 40 },
+      guitar: { target: [GUITAR.x, 0.32, GUITAR.z], dist: 0.95, az: 0.05, el: 0.62, fov: 40 },
+      head: { target: [GUITAR.x - 0.02, 0.83, GUITAR.z - 0.36], dist: 0.42, az: -0.15, el: 0.55, fov: 40 },
+      end: { target: [BENCH.x + 0.76, 0.2, BENCH.z + 0.27], dist: 0.85, az: 1.25, el: 0.2, fov: 40 },
+      seat: { target: [BENCH.x - 0.1, 0.32, BENCH.z], dist: 1.3, az: -0.1, el: 0.85, fov: 40 },
+    };
+    const orbit = { target: new THREE.Vector3(), dist: 2, az: 0, el: 0.3, active: false };
+    let current = q.get('cam') || 'scene';
+    function apply() {
+      const v = VIEWS[current];
+      camera.fov = v.fov; camera.updateProjectionMatrix();
+      if (v.pos) { camera.position.set(...v.pos); camera.lookAt(...v.look); orbit.active = false; return; }
+      orbit.active = true;
+      const ce = Math.cos(orbit.el);
+      camera.position.set(orbit.target.x + orbit.dist * ce * Math.sin(orbit.az), orbit.target.y + orbit.dist * Math.sin(orbit.el), orbit.target.z + orbit.dist * ce * Math.cos(orbit.az));
+      camera.lookAt(orbit.target);
+    }
+    // aim the close-ups at the details themselves (log.layout.points), facing them
+    function aimViews() {
+      const P = log.layout.points; if (!P) return;
+      const faceAz = Math.atan2(P.face[0], P.face[1]), axAz = Math.atan2(P.axis[0], P.axis[1]);
+      Object.assign(VIEWS.guitar, { target: P.hole.map((x, i) => i === 1 ? x - 0.08 : x), az: faceAz + 0.1, el: 0.5, dist: 0.9 });
+      Object.assign(VIEWS.head, { target: P.head, az: faceAz - 0.2, el: 0.75, dist: 0.38 });
+      Object.assign(VIEWS.end, { target: P.endB, az: axAz + 0.35, el: 0.25, dist: 0.8 });
+      Object.assign(VIEWS.seat, { target: P.seat, az: faceAz - 0.1, el: 0.9, dist: 1.25 });
+      VIEWS.bridge = { target: P.bridge, az: faceAz + 0.15, el: 0.55, dist: 0.32, fov: 40 };
+      VIEWS.endA = { target: P.endA, az: axAz + Math.PI - 0.3, el: 0.3, dist: 0.8, fov: 40 };
+    }
+    aimViews();
+    function view(name) {
+      current = VIEWS[name] ? name : 'scene';
+      const v = VIEWS[current];
+      if (!v.pos) { orbit.target.set(...v.target); orbit.dist = v.dist; orbit.az = v.az; orbit.el = v.el; }
+      for (const b of document.querySelectorAll('#ui button')) b.classList.toggle('on', b.dataset.v === current);
+      apply();
+      log.resize(innerWidth, innerHeight);
+    }
+    window.orbitSet = (az, el, dist) => { if (az != null) orbit.az = az; if (el != null) orbit.el = el; if (dist != null) orbit.dist = dist; apply(); };
+    const ui = document.getElementById('ui');
+    for (const k of Object.keys(VIEWS)) { const b = document.createElement('button'); b.textContent = k; b.dataset.v = k; b.onclick = () => view(k); ui.appendChild(b); }
+    let drag = null;
+    addEventListener('pointerdown', (e) => { if (orbit.active && e.target === renderer.domElement) drag = { x: e.clientX, y: e.clientY }; });
+    addEventListener('pointerup', () => { drag = null; });
+    addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      orbit.az -= (e.clientX - drag.x) * 0.006; orbit.el = Math.min(1.5, Math.max(-0.2, orbit.el + (e.clientY - drag.y) * 0.006));
+      drag = { x: e.clientX, y: e.clientY }; apply();
+    });
+    addEventListener('wheel', (e) => { if (!orbit.active) return; orbit.dist = Math.max(0.12, orbit.dist * Math.exp(e.deltaY * 0.001)); apply(); }, { passive: true });
+    view(current);
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+      for (const k in mods) mods[k].resize && mods[k].resize(innerWidth, innerHeight);
+      log.resize(innerWidth, innerHeight);
+    });
+
+    // rebuild (as the core does when reduced motion changes) to check dispose()
+    function rebuild(rm) { log.dispose(); ctx.reducedMotion = !!rm; log = createLog(ctx, { firePosition: firePos.clone(), wind }); log.setTimeOfDay(tod); log.resize(innerWidth, innerHeight); bench.log = log; return renderer.info.memory; }
+
+    // GPU cost: render with and without the log group, synced with gl.finish()
+    function measure(n = 60) {
+      const gl = renderer.getContext();
+      const timeRender = (vis) => {
+        log.group.visible = vis; renderer.render(scene, camera); gl.finish();
+        const a = performance.now();
+        for (let i = 0; i < n; i++) { log.update(i * 0.016, 0.016); renderer.render(scene, camera); }
+        gl.finish(); log.group.visible = true; return (performance.now() - a) / n;
+      };
+      timeRender(true); timeRender(false);
+      const r = [];
+      for (let k = 0; k < 3; k++) r.push([timeRender(true), timeRender(false)]);
+      const withL = Math.min(...r.map((x) => x[0])), without = Math.min(...r.map((x) => x[1]));
+      let u = performance.now(); for (let i = 0; i < 1000; i++) log.update(i * 0.016, 0.016); u = (performance.now() - u) / 1000;
+      renderer.render(scene, camera);
+      const calls = renderer.info.render.calls, tris = renderer.info.render.triangles;
+      log.group.visible = false; renderer.render(scene, camera);
+      const calls0 = renderer.info.render.calls, tris0 = renderer.info.render.triangles;
+      log.group.visible = true; renderer.render(scene, camera);
+      return { withMs: +withL.toFixed(3), withoutMs: +without.toFixed(3), deltaMs: +(withL - without).toFixed(3), updateMs: +u.toFixed(5),
+               drawCalls: calls - calls0, triangles: tris - tris0, size: [innerWidth, innerHeight, renderer.getPixelRatio()], layout: log.layout, errors: window.__errors };
+    }
+    // GPU time with EXT_disjoint_timer_query_webgl2: n frames with the log, n without, interleaved
+    async function measureGPU(n = 40) {
+      const gl = renderer.getContext(), ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+      if (!ext) return { error: 'no timer query' };
+      const res = { on: [], off: [] };
+      const frame = () => new Promise((r) => requestAnimationFrame(r));
+      renderer.setAnimationLoop(null);
+      for (let i = 0; i < n * 2; i++) {
+        const vis = i % 2 === 0;
+        log.group.visible = vis;
+        const q = gl.createQuery();
+        gl.beginQuery(ext.TIME_ELAPSED_EXT, q);
+        renderer.render(scene, camera);
+        gl.endQuery(ext.TIME_ELAPSED_EXT);
+        (vis ? res.on : res.off).push(q);
+        await frame();
+      }
+      log.group.visible = true;
+      for (let k = 0; k < 30; k++) await frame();
+      const read = (arr) => arr.map((q) => gl.getQueryParameter(q, gl.QUERY_RESULT_AVAILABLE) ? gl.getQueryParameter(q, gl.QUERY_RESULT) / 1e6 : NaN).filter((x) => isFinite(x)).sort((a, b) => a - b);
+      const on = read(res.on), off = read(res.off), med = (a) => a[a.length >> 1];
+      renderer.setAnimationLoop(loop);
+      return { onMs: +med(on).toFixed(3), offMs: +med(off).toFixed(3), deltaMs: +(med(on) - med(off)).toFixed(3), samples: [on.length, off.length], size: [innerWidth, innerHeight, renderer.getPixelRatio()] };
+    }
+    const bench = window.bench = { measureGPU, view, measure, rebuild, get log() { return log; }, set log(v) { log = v; }, mods, scene, camera, renderer, THREE };
+
+    const clock = new THREE.Clock();
+    function loop() {
+      const dt = Math.min(0.1, clock.getDelta()), t = clock.elapsedTime;
+      for (const k in mods) mods[k].update(t, dt);
+      log.update(t, dt);
+      renderer.render(scene, camera);
+    }
+    renderer.setAnimationLoop(loop);
+    document.getElementById('hud').textContent = 'log · built in ' + log.layout.buildMs.toFixed(0) + ' ms · ' + (Object.keys(mods).join(', ') || 'no other modules') + (mods.fire ? '' : ' (stand-in light)') + ' · guitar slide ' + (log.layout.guitar.slide * 100).toFixed(1) + ' cm';
+  </script>
+</body>
+</html>
