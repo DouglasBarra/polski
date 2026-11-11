@@ -1,0 +1,200 @@
+<!DOCTYPE html>
+<!--
+  Iskry · dev/road.html — test bench for js/scene/road.js (the field road).
+  Serve the repo root (python3 -m http.server) and open /dev/road.html.
+  Loads the real sky.js / fire.js (and ground.js, grass.js if present), each guarded;
+  otherwise a flat dark ground and a stand-in fire light.
+  URL params:
+    ?cam=real (default, the site's camera) | close (low, across a puddle toward the fire) | near (a rut, from behind)
+        | top (straight down)       drag to orbit, wheel to zoom (any mode)
+    &rm=1 reduced motion   &nosky=1 &nofire=1 &noground=1 &nograss=1   &gain=N (CSS brightness, for inspecting)
+    &hour=H  time of day pushed to modules
+  Console: measure() -> GPU ms of the road (timer query when available), bake ms, calls, tris.
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iskry · road bench</title>
+  <link rel="stylesheet" href="../css/tokens.css">
+  <style>
+    html, body { margin: 0; height: 100%; background: #0a0705; overflow: hidden; }
+    #gl { position: fixed; inset: 0; }
+    #hud { position: fixed; left: 10px; bottom: 8px; font: 11px ui-monospace, monospace; color: #6b5543; pointer-events: none; }
+  </style>
+  <script type="importmap">
+    { "imports": {
+        "three": "../vendor/three/three.module.js",
+        "three/addons/": "../vendor/three/addons/"
+    } }
+  </script>
+</head>
+<body>
+  <div id="gl"></div>
+  <div id="hud"></div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { createRoad } from '../js/scene/road.js';
+    import { FIRE, roadPoint, roadProject, ROAD } from '../js/scene/layout.js';
+
+    const q = new URLSearchParams(location.search);
+    window.__errors = [];
+    addEventListener('error', (e) => window.__errors.push(String(e.message)));
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.NoToneMapping;
+    document.getElementById('gl').appendChild(renderer.domElement);
+    if (q.has('gain')) renderer.domElement.style.filter = `brightness(${+q.get('gain') || 3})`;
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.05, 400);
+    scene.fog = new THREE.Fog(new THREE.Color('#301d11'), 14, 72);
+
+    // camera presets (target + spherical offset), then a simple drag-orbit
+    const sAt = (z) => { for (let t = 0; t <= 1; t += 0.0005) { const p = roadPoint(t); if (p.z <= z) return p; } return roadPoint(1); };
+    const presets = {
+      real: () => { camera.position.set(0, 1.6, 12); return new THREE.Vector3(0, 4.1, -10); },
+      close: () => { const p = sAt(-1.6), x = p.x - p.rx * 0.6, z = p.z - p.rz * 0.6; camera.position.set(x + 2.3, 0.55, z + 0.5); return new THREE.Vector3(x - 0.2, 0, z - 0.1); },
+      near: () => { const p = sAt(3.2); camera.position.set(p.x - 0.2, 0.75, p.z + 2.0); return new THREE.Vector3(p.x - 0.1, 0, p.z - 1.2); },
+      top: () => { const p = sAt(0); camera.position.set(p.x, 7, p.z + 0.01); return new THREE.Vector3(p.x, 0, p.z); },
+    };
+    const mode = presets[q.get('cam')] ? q.get('cam') : 'real';
+    const target = presets[mode]();
+    camera.lookAt(target);
+    const sph = new THREE.Spherical().setFromVector3(camera.position.clone().sub(target));
+    let drag = null;
+    const applyOrbit = () => { camera.position.setFromSpherical(sph).add(target); camera.lookAt(target); };
+    addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY }; });
+    addEventListener('pointerup', () => { drag = null; });
+    addEventListener('pointermove', (e) => {
+      if (!drag) return;
+      sph.theta -= (e.clientX - drag.x) * 0.005; sph.phi = Math.min(1.55, Math.max(0.05, sph.phi - (e.clientY - drag.y) * 0.005));
+      drag = { x: e.clientX, y: e.clientY }; applyOrbit();
+    });
+    addEventListener('wheel', (e) => { sph.radius = Math.max(0.2, sph.radius * (1 + e.deltaY * 0.001)); applyOrbit(); });
+
+    const css = getComputedStyle(document.documentElement);
+    const readToken = (name, fallback) => {
+      const v = css.getPropertyValue(name).trim();
+      if (!v) return fallback;
+      const n = parseFloat(v);
+      return /^-?[\d.]+(ms|px)?$/.test(v) && !isNaN(n) ? n : v;
+    };
+    const ctx = { scene, camera, renderer, reducedMotion: q.get('rm') === '1', readToken };
+    const firePos = new THREE.Vector3(FIRE.x, FIRE.y, FIRE.z);
+    const mods = {};
+    const tryLoad = async (name, factory, opts) => {
+      try { const m = await import(`../js/scene/${name}.js`); mods[name] = m[factory](ctx, opts); }
+      catch (e) { console.warn('dev: ' + name + ' unavailable', e); }
+    };
+    if (q.get('nosky') !== '1') await tryLoad('sky', 'createSky', { horizonY: 0, radius: 90 });
+    if (mods.sky && mods.sky.fogColor) { scene.fog.color.copy(mods.sky.fogColor); scene.fog.near = mods.sky.fogNear; scene.fog.far = mods.sky.fogFar; }
+    if (!mods.sky) {
+      renderer.setClearColor(new THREE.Color('#0a0705'), 1);
+      const ground = new THREE.Mesh(new THREE.CircleGeometry(89, 96).rotateX(-Math.PI / 2).translate(0, 0, 12),
+        new THREE.MeshBasicMaterial({ color: '#0d0806', fog: true, depthWrite: false }));
+      ground.renderOrder = -45; scene.add(ground);
+    }
+    if (q.get('noground') !== '1') await tryLoad('ground', 'createGround', { firePosition: firePos.clone(), wind: 0.25 });
+    if (q.get('nograss') !== '1') await tryLoad('grass', 'createGrass', { firePosition: firePos.clone(), wind: 0.25 });
+    if (q.get('nofire') !== '1') await tryLoad('fire', 'createFire', { position: firePos.clone(), scale: 1.3 });
+    if (!mods.fire) { const l = new THREE.PointLight('#ffae62', 30, 60, 2); l.name = 'fire-light'; l.position.set(firePos.x, 0.8, firePos.z); scene.add(l); }
+
+    const mk = () => createRoad(ctx, { firePosition: firePos.clone(), wind: 0.25 });
+    window.road = mk();
+    window.__dev = { THREE, scene, camera, renderer, ctx, mods, roadProject, ROAD, createRoad, firePos };
+    const tod = (() => {
+      const h = parseFloat(q.get('hour'));
+      if (!isFinite(h)) return { hour: 22, dusk: 0, night: 1, dawn: 0 };
+      if (h > 16 && h < 19) return { hour: h, dusk: 0.8, night: 0.2, dawn: 0 };
+      if (h > 5 && h < 8) return { hour: h, dusk: 0, night: 0.3, dawn: 0.7 };
+      return { hour: h, dusk: 0, night: 1, dawn: 0 };
+    })();
+    for (const k in mods) mods[k].setTimeOfDay && mods[k].setTimeOfDay(tod);
+    road.setTimeOfDay(tod);
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+      for (const k in mods) mods[k].resize && mods[k].resize(innerWidth, innerHeight);
+    });
+    window.rebuild = (rm) => { road.dispose(); ctx.reducedMotion = !!rm; window.road = mk(); return renderer.info.memory; };
+
+    // GPU time of the road: whole-frame GPU time with and without it (timer query), else CPU+finish
+    window.measure = async (frames = 40, isolate = false) => {
+      const gl = renderer.getContext();
+      const hidden = isolate ? scene.children.filter((c) => c !== road.group && c.visible) : [];
+      for (const c of hidden) c.visible = false;
+      const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+      const run = async (vis) => {
+        road.group.visible = vis;
+        const out = [];
+        for (let i = 0; i < frames; i++) {
+          let qy = null;
+          if (ext) { qy = gl.createQuery(); gl.beginQuery(ext.TIME_ELAPSED_EXT, qy); }
+          const a = performance.now();
+          renderer.render(scene, camera);
+          if (ext) { gl.endQuery(ext.TIME_ELAPSED_EXT); gl.flush(); } else gl.finish();
+          const cpu = performance.now() - a;
+          if (ext) {
+            const ok = await new Promise((r) => { const t0 = performance.now(); const poll = () => (gl.getQueryParameter(qy, gl.QUERY_RESULT_AVAILABLE) ? r(true) : performance.now() - t0 > 1000 ? r(false) : setTimeout(poll, 2)); poll(); });
+            if (ok && !gl.getParameter(ext.GPU_DISJOINT_EXT)) out.push(gl.getQueryParameter(qy, gl.QUERY_RESULT) / 1e6); gl.deleteQuery(qy);
+          } else out.push(cpu);
+          await new Promise((r) => setTimeout(r, 0));
+        }
+        road.group.visible = true;
+        out.sort((x, y) => x - y);
+        return out.length ? out[Math.floor(out.length * 0.2)] : NaN;   // low percentile: other tabs share the GPU
+      };
+      await run(true);
+      const withR = await run(true), without = await run(false), withR2 = await run(true);
+      for (const c of hidden) c.visible = true;
+      renderer.render(scene, camera);
+      return { timer: !!ext, isolate, frameWithMs: +withR.toFixed(3), frameWithoutMs: +without.toFixed(3), frameWith2Ms: +withR2.toFixed(3),
+        roadMs: +(((withR + withR2) / 2) - without).toFixed(3), bakeMs: +road.bakeMs.toFixed(1),
+        calls: renderer.info.render.calls, tris: renderer.info.render.triangles, size: [innerWidth, innerHeight, renderer.getPixelRatio()],
+        memory: renderer.info.memory, errors: window.__errors };
+    };
+
+    // GPU frame time with and without the road, interleaved (Apple GPUs are tile-based, so a timer
+    // query around one draw call is meaningless; whole frames only). Low percentiles, since other tabs share the GPU.
+    const chan = new MessageChannel(), waiters = [];
+    chan.port1.onmessage = () => { const w = waiters.shift(); if (w) w(); };
+    const yieldTask = () => new Promise((r) => { waiters.push(r); chan.port2.postMessage(0); });
+    window.measurePairs = async (pairs = 60, isolate = false) => {
+      const gl = renderer.getContext(), ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+      if (!ext) return 'no timer query';
+      const hidden = isolate ? scene.children.filter((c) => c !== road.group && c.visible) : [];
+      for (const c of hidden) c.visible = false;
+      const once = async (vis) => {
+        road.group.visible = vis;
+        const qy = gl.createQuery();
+        gl.beginQuery(ext.TIME_ELAPSED_EXT, qy); renderer.render(scene, camera); gl.endQuery(ext.TIME_ELAPSED_EXT); gl.flush();
+        let ok = false;
+        for (let k = 0; k < 300 && !ok; k++) { await new Promise((r) => setTimeout(r, 4)); ok = gl.getQueryParameter(qy, gl.QUERY_RESULT_AVAILABLE); }
+        const v = ok && !gl.getParameter(ext.GPU_DISJOINT_EXT) ? gl.getQueryParameter(qy, gl.QUERY_RESULT) / 1e6 : NaN;
+        gl.deleteQuery(qy); return v;
+      };
+      const on = [], off = [];
+      for (let i = 0; i < pairs; i++) { const a = await once(true), b = await once(false); if (a === a && b === b) { on.push(a); off.push(b); } }
+      road.group.visible = true; for (const c of hidden) c.visible = true;
+      const st = (x) => { x = x.slice().sort((p, q) => p - q); return { min: +x[0].toFixed(3), p20: +x[Math.floor(x.length * 0.2)].toFixed(3), med: +x[Math.floor(x.length / 2)].toFixed(3) }; };
+      if (!on.length) return 'no results';
+      const A = st(on), B = st(off);
+      return { n: on.length, isolate, with: A, without: B, roadMin: +(A.min - B.min).toFixed(3), roadP20: +(A.p20 - B.p20).toFixed(3), roadMed: +(A.med - B.med).toFixed(3),
+        size: [innerWidth, innerHeight, renderer.getPixelRatio()] };
+    };
+    const clock = new THREE.Clock();
+    renderer.setAnimationLoop(() => {
+      const dt = Math.min(0.1, clock.getDelta()), t = clock.elapsedTime;
+      for (const k in mods) mods[k].update(t, dt);
+      road.update(t, dt);
+      renderer.render(scene, camera);
+    });
+    document.getElementById('hud').textContent = 'road · ' + mode + ' · ' + Object.keys(mods).join(', ') + ' · bake ' + road.bakeMs.toFixed(0) + ' ms';
+  </script>
+</body>
+</html>
