@@ -67,7 +67,7 @@ const TUNE = {
   breathPeriodA: 19,           // s, the two sines of the breathing camera
   breathPeriodB: 13,
   bandTop: 0.09,               // words float between these fractions of the height
-  bandBottom: 0.6,
+  bandBottom: 0.565,           // above the flames, so no word sits on the fire
   spawnTries: 9,               // candidate heights tried to avoid crowding
   spawnNearX: 0.3,             // only words within this fraction of the width crowd a spawn
   depthBias: 1,                // >1 favours far words, <1 near words
@@ -368,12 +368,12 @@ function linkMoon() {
 
 /* ---------- time of day ---------- */
 
-// The night follows the visitor's clock: dusk in the evening, deep night, then the cool
-// hour before dawn. Daytime is the evening here (the fire is always lit), so the dawn
-// hands over to dusk slowly in the morning. Weights sum to 1. ?hour=5.5 pins the clock (dev).
+// The night follows the visitor's clock: dusk in the early evening, deep night, then the
+// cool hour before dawn. The fire is always lit, so daytime shows as early night with a
+// faint afterglow (mostly night: the stars stay out). Weights sum to 1. ?hour=5.5 pins it.
 const TIME_KEYS = [  // hour, dusk, night, dawn
-  [0, 0, 1, 0], [2.5, 0, 1, 0], [4.5, 0, 0.25, 0.75], [6.5, 0, 0, 1],
-  [8.5, 1, 0, 0], [19.5, 1, 0, 0], [22, 0, 1, 0], [24, 0, 1, 0]
+  [0, 0, 1, 0], [3.5, 0, 1, 0], [5.5, 0, 0.3, 0.7], [7, 0, 0.2, 0.8],
+  [9, 0.3, 0.7, 0], [16, 0.3, 0.7, 0], [17.5, 0.8, 0.2, 0], [20, 0, 1, 0], [24, 0, 1, 0]
 ];
 const tod = { hour: 0, dusk: 0, night: 1, dawn: 0 };
 const pinnedHour = (() => {

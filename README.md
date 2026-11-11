@@ -15,3 +15,9 @@ No build step. three.js 0.186.1 is vendored in `vendor/three/`. The rules every 
 - `?bare=1` shows the words without the WebGL night; `?gust=1` sends a themed gust after 4 seconds.
 - Each scene module has a test page in `dev/` (for example `dev/fire.html`).
 - `node tools/validate-words.js` checks `data/words.js`; `node tests/memory.test.js` runs the memory tests.
+
+## Credits
+
+- Star data: [HYG Database](https://github.com/astronexus/HYG-Database) v4.1, (c) David Nash / astronexus, CC BY-SA 4.0. The share-alike licence applies to `js/scene/stars-data.js`.
+- Constellation lines (debug view only): [d3-celestial](https://github.com/ofrohn/d3-celestial), (c) 2015 Olaf Frohn, BSD 3-Clause.
+- three.js, (c) three.js authors, MIT (`vendor/three/LICENSE`).

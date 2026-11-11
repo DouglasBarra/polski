@@ -78,14 +78,14 @@ const DEFAULTS = {
 };
 
 const LOOK = {
-  gain: 0.16,          // display-space peak of a V 6 star at the zenith
+  gain: 0.30,          // display-space peak of a V 6 star at the zenith
   gamma: 0.34,          // peak ~ flux^gamma: the photographic squeeze of the dynamic range
   maxPeak: 0.62,        // no star is brighter than the words (cream text ~0.9)
   extK: [0.08, 0.13, 0.24], // extinction, magnitudes per airmass, R G B (rural haze, so a bit high)
   saturation: 1.35,     // star colours, photographs push them a little
   twinkle: 0.11,        // max scintillation amplitude (bright, low stars only)
   spikes: 0.10,         // diffraction spikes, relative to the core peak
-  milkyGain: 0.22,     // display-space brightness of the brightest milky way
+  milkyGain: 0.62,     // display-space brightness of the brightest milky way
 };
 
 // --------------------------------------------------------------- astronomy
