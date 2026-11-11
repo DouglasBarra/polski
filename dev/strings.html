@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iskry dev: strings</title>
+  <link rel="stylesheet" href="../css/tokens.css">
+  <style>
+    html, body { margin: 0; height: 100%; overflow: hidden; background: var(--night); }
+    body {
+      background:
+        radial-gradient(ellipse 60% 38% at 50% 92%, rgba(240, 132, 44, 0.20), transparent 70%),
+        linear-gradient(var(--night-deep), var(--night) 55%, var(--night-warm));
+    }
+    canvas { display: block; position: fixed; inset: 0; }
+    .w { position: fixed; left: 0; top: 0; font: 400 20px "Iowan Old Style", Georgia, serif;
+         color: var(--ember); text-shadow: 0 0 12px rgba(240, 132, 44, 0.5); white-space: nowrap;
+         pointer-events: none; will-change: transform, opacity; }
+    .w.hit { color: var(--ember-bright); }
+    #hud { position: fixed; left: 12px; bottom: 10px; font: 12px ui-monospace, monospace; color: var(--muted); opacity: 0.6; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "../vendor/three/three.module.js", "three/addons/": "../vendor/three/addons/" } }
+  </script>
+</head>
+<body>
+  <div id="hud">click: pluck nearest string &middot; r: toggle reduced motion</div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { createStrings } from '../js/scene/strings.js';
+
+    window.__errors = [];
+    addEventListener('error', (e) => window.__errors.push(String(e.message)));
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    window.__renderer = renderer;
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 200);
+    camera.position.set(0, 1.6, 12);
+    camera.lookAt(0, 4.1, -10);
+
+    // A small fire glow for context.
+    const glowTex = (() => {
+      const c = document.createElement('canvas'); c.width = c.height = 64;
+      const g = c.getContext('2d'); const r = g.createRadialGradient(32, 32, 0, 32, 32, 32);
+      r.addColorStop(0, 'rgba(255,190,110,1)'); r.addColorStop(0.3, 'rgba(240,132,44,0.5)'); r.addColorStop(1, 'rgba(184,72,26,0)');
+      g.fillStyle = r; g.fillRect(0, 0, 64, 64); return new THREE.CanvasTexture(c);
+    })();
+    const fire = new THREE.Sprite(new THREE.SpriteMaterial({ map: glowTex, blending: THREE.AdditiveBlending, depthWrite: false }));
+    fire.position.set(-3, 0.4, -2); fire.scale.set(5, 5, 1); fire.material.opacity = 0.35; scene.add(fire);
+
+    const css = getComputedStyle(document.documentElement);
+    let reduced = matchMedia('(prefers-reduced-motion: reduce)').matches;
+    const readToken = (n, fb) => { const v = css.getPropertyValue(n).trim(); if (!v) return fb; const f = parseFloat(v); return isNaN(f) || /[a-z(#]/i.test(v.replace(/^[\d.]+(ms|px)?$/, '')) ? v : f; };
+
+    let strings;
+    function build() {
+      if (strings) strings.dispose();
+      strings = createStrings({ scene, camera, renderer, reducedMotion: reduced, readToken }, { count: 5, extents: { xMin: -22, xMax: 22, yMin: 1.5, yMax: 10, zMin: -14, zMax: 2 }, firePosition: new THREE.Vector3(-3, 0.6, -2) });
+      window.__strings = strings;
+    }
+    build();
+
+    // Fake words drifting left -> right, swaying vertically through the strings.
+    const PL = ['iskra', 'ognisko', 'gwiazda', 'noc', 'drewno', 'cisza', 'struna', 'ciepło', 'dym', 'księżyc', 'las', 'żar'];
+    const words = PL.map((t, i) => {
+      const el = document.createElement('div'); el.className = 'w'; el.textContent = t; document.body.appendChild(el);
+      const z = 2 - ((i * 3.7) % 16); return { y0: 2 + ((i * 0.618) % 1) * (4 + (2 - z) * 0.35), el, pos: new THREE.Vector3(), prev: new THREE.Vector3(), seed: i * 1.37, speed: 0.5 + (i % 4) * 0.12,
+               z: 2 - ((i * 3.7) % 16), x: -22 + (i * 3.9) % 44, hitT: -9 };
+    });
+    const tmp = new THREE.Vector3();
+
+    const clock = new THREE.Clock();
+    let t = 0, frameMs = 0, frames = 0;
+    window.__stats = { touches: 0 };
+    function tick() {
+      const dt = Math.min(clock.getDelta(), 0.1); t += dt;
+      const t0 = performance.now();
+      strings.update(t, dt);
+      for (const w of words) {
+        w.prev.copy(w.pos);
+        w.x += w.speed * dt; if (w.x > 23) { w.x = -23; w.prev.set(w.x, w.pos.y, w.z); }
+        w.pos.set(w.x, w.y0 + 0.7 * Math.sin(t * 0.35 + w.seed) , w.z);
+        if (frames > 0 && strings.touch(w.prev, w.pos)) { w.hitT = t; window.__stats.touches++; }
+      }
+      frameMs += performance.now() - t0; frames++;
+      renderer.render(scene, camera);
+      for (const w of words) {
+        tmp.copy(w.pos).project(camera);
+        const x = (tmp.x * 0.5 + 0.5) * innerWidth, y = (-tmp.y * 0.5 + 0.5) * innerHeight;
+        const depth = THREE.MathUtils.clamp((w.z + 14) / 16, 0, 1);
+        w.el.style.transform = `translate(${x}px, ${y}px) translate(-50%, -50%) scale(${0.6 + 0.5 * depth})`;
+        w.el.style.opacity = (0.35 + 0.55 * depth) * (t - w.hitT < 0.6 ? 1.3 : 1);
+      }
+      requestAnimationFrame(tick);
+    }
+    requestAnimationFrame(tick);
+    window.__cpu = () => { const r = frameMs / frames; frameMs = 0; frames = 1; return r; };
+
+    // Click: find the point on the click ray nearest to any string, pluck there.
+    const ray = new THREE.Raycaster(), ndc = new THREE.Vector2(), probe = new THREE.Vector3(), bestP = new THREE.Vector3();
+    window.__pluckAt = (cx, cy, strength = 1) => {
+      ndc.set(cx / innerWidth * 2 - 1, -(cy / innerHeight) * 2 + 1);
+      ray.setFromCamera(ndc, camera);
+      let best = Infinity;
+      for (let d = 4; d < 60; d += 0.25) {
+        ray.ray.at(d, probe);
+        const n = strings.nearestPoint(probe), dd = n.distanceToSquared(probe);
+        if (dd < best) { best = dd; bestP.copy(probe); }
+      }
+      strings.pluckNearest(bestP, strength);
+    };
+    addEventListener('pointerdown', (e) => window.__pluckAt(e.clientX, e.clientY, 1));
+    addEventListener('keydown', (e) => { if (e.key === 'r') { reduced = !reduced; build(); } });
+    addEventListener('resize', () => {
+      renderer.setSize(innerWidth, innerHeight); camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+      strings.resize(innerWidth, innerHeight);
+    });
+  </script>
+</body>
+</html>

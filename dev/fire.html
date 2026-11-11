@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iskry dev: fire</title>
+  <link rel="stylesheet" href="../css/tokens.css">
+  <style>
+    html, body { margin: 0; height: 100%; background: var(--night); overflow: hidden; }
+    canvas { display: block; }
+    #hud { position: fixed; left: 12px; top: 10px; font: 12px/1.4 monospace; color: var(--muted); opacity: .7; }
+  </style>
+  <script type="importmap">
+    { "imports": { "three": "../vendor/three/three.module.js", "three/addons/": "../vendor/three/addons/" } }
+  </script>
+</head>
+<body>
+  <div id="hud">fire · ?reduced=1 · ?scale= · ?x= · ?y= · ?cam=close · ?props</div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { createFire } from '../js/scene/fire.js';
+
+    window.__errors = [];
+    window.addEventListener('error', (e) => window.__errors.push(String(e.message)));
+
+    const q = new URLSearchParams(location.search);
+    const css = getComputedStyle(document.documentElement);
+    const readToken = (name, fallback) => {
+      const v = css.getPropertyValue(name).trim();
+      if (!v) return fallback;
+      const n = parseFloat(v);
+      return typeof fallback === 'number' && Number.isFinite(n) ? n : v;
+    };
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.outputColorSpace = THREE.SRGBColorSpace; renderer.toneMapping = THREE.NoToneMapping;
+    renderer.setPixelRatio(Math.min(2, devicePixelRatio));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setClearColor(new THREE.Color(readToken('--night', '#1a120d')));
+    document.body.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 300);
+    if (q.get('cam') === 'close') { camera.position.set(0, 1.1, 2.5); camera.lookAt(0, 0.8, -2); }
+    else { camera.position.set(0, 1.6, 12); camera.lookAt(0, 4.1, -10); }
+    scene.fog = new THREE.Fog(new THREE.Color(readToken('--night', '#1a120d')), 20, 90);
+
+    // stand-in ground and a few props to see the light fall-off
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(200, 200),
+      new THREE.MeshStandardMaterial({ color: 0x2a1a10, roughness: 1 }));
+    ground.rotation.x = -Math.PI / 2;
+    scene.add(ground);
+    scene.add(new THREE.HemisphereLight(0x2a2030, 0x120a06, 0.35));
+    if (q.has('props')) for (let i = -2; i <= 2; i++) {
+      const s = new THREE.Mesh(new THREE.SphereGeometry(0.4, 24, 16), new THREE.MeshStandardMaterial({ color: 0xd8c8b0, roughness: .8 }));
+      s.position.set(i * 3, 0.4, -2 + Math.abs(i) * 1.5 - 3); scene.add(s);
+    }
+
+    const ctx = { scene, camera, renderer, reducedMotion: q.has('reduced') || matchMedia('(prefers-reduced-motion: reduce)').matches, readToken };
+    const fire = createFire(ctx, {
+      position: new THREE.Vector3(parseFloat(q.get('x') ?? -3), parseFloat(q.get('y') || 0), -2),
+      scale: parseFloat(q.get('scale') || 1),
+    });
+    window.fire = fire; window.__dev = { THREE, scene, camera, renderer, ctx, createFire };
+
+    addEventListener('resize', () => {
+      renderer.setSize(innerWidth, innerHeight);
+      camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+      fire.resize(innerWidth, innerHeight);
+    });
+
+    // frame timing for measurement
+    window.__fireMs = [];
+    const t0 = performance.now(); let last = t0;
+    let tOffset = parseFloat(q.get('t') || 0);
+    renderer.setAnimationLoop(() => {
+      const now = performance.now(), dt = (now - last) / 1000, t = (now - t0) / 1000 + tOffset; last = now;
+      const a = performance.now();
+      fire.update(t, dt);
+      window.__fireMs.push(performance.now() - a);
+      if (window.__fireMs.length > 600) window.__fireMs.shift();
+      renderer.render(scene, camera);
+    });
+  </script>
+</body>
+</html>

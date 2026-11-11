@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<!--
+  Iskry · dev/sky.html — standalone test bench for js/scene/sky.js.
+  Serve the repo root (python3 -m http.server) and open /dev/sky.html.
+  URL params: ?rm=1 (reduced motion) &nomoon=1 &nomilky=1 &nomist=1 &labels=0 &seed=N
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iskry · sky bench</title>
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,300..600&display=swap&subset=latin-ext" rel="stylesheet">
+  <style>
+    html, body { margin: 0; height: 100%; background: var(--night); overflow: hidden; }
+    #gl, #css { position: fixed; inset: 0; }
+    #css { pointer-events: none; }
+    .lbl { font-family: var(--font-pl); font-size: 26px; color: var(--ember); white-space: nowrap; }
+    #hud { position: fixed; left: 10px; bottom: 8px; font: 11px ui-monospace, monospace; color: #6b5543; }
+  </style>
+  <script type="importmap">
+    { "imports": {
+        "three": "../vendor/three/three.module.js",
+        "three/addons/": "../vendor/three/addons/"
+    } }
+  </script>
+</head>
+<body>
+  <div id="gl"></div>
+  <div id="css"></div>
+  <div id="hud"></div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { CSS3DRenderer, CSS3DObject } from 'three/addons/renderers/CSS3DRenderer.js';
+    import { createSky } from '../js/scene/sky.js';
+
+    const q = new URLSearchParams(location.search);
+    window.__errors = [];
+    addEventListener('error', (e) => window.__errors.push(String(e.message)));
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.outputColorSpace = THREE.SRGBColorSpace;
+    renderer.toneMapping = THREE.NoToneMapping;
+    document.getElementById('gl').appendChild(renderer.domElement);
+
+    const cssR = new CSS3DRenderer();
+    cssR.setSize(innerWidth, innerHeight);
+    document.getElementById('css').appendChild(cssR.domElement);
+
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 200);
+    camera.position.set(0, 1.6, 12);
+    camera.lookAt(0, 4.1, -10);
+
+    const css = getComputedStyle(document.documentElement);
+    const readToken = (name, fallback) => {
+      const v = css.getPropertyValue(name).trim();
+      if (!v) return fallback;
+      const n = parseFloat(v);
+      return /^-?[\d.]+(ms|px)?$/.test(v) && !isNaN(n) ? n : v;
+    };
+    const ctx = { scene, camera, renderer, reducedMotion: q.get('rm') === '1', readToken };
+    const sky = createSky(ctx, {
+      moon: q.get('nomoon') !== '1', milkyWay: q.get('nomilky') !== '1', mist: q.get('nomist') !== '1',
+      seed: q.has('seed') ? +q.get('seed') : undefined,
+    });
+    window.sky = sky;
+    scene.fog = new THREE.Fog(sky.fogColor, sky.fogNear, sky.fogFar);
+
+    // placeholder fire: a soft additive sprite at the core's fire position
+    const c = document.createElement('canvas'); c.width = c.height = 128;
+    const g = c.getContext('2d'); const rg = g.createRadialGradient(64, 64, 0, 64, 64, 64);
+    rg.addColorStop(0, 'rgba(255,190,110,1)'); rg.addColorStop(0.25, 'rgba(240,132,44,0.5)'); rg.addColorStop(1, 'rgba(184,72,26,0)');
+    g.fillStyle = rg; g.fillRect(0, 0, 128, 128);
+    const fireTex = new THREE.CanvasTexture(c); fireTex.colorSpace = THREE.SRGBColorSpace;
+    const fire = new THREE.Sprite(new THREE.SpriteMaterial({ map: fireTex, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, fog: false }));
+    fire.position.set(-3, 0.7, -2); fire.scale.set(2.6, 2.6, 1); scene.add(fire);
+
+    // placeholder strings (fogged WebGL lines) climbing as they recede
+    const lineMat = new THREE.LineBasicMaterial({ color: 0xf4e6d0, transparent: true, opacity: 0.22, fog: true });
+    for (let i = 0; i < 5; i++) {
+      const pts = [new THREE.Vector3(-22, 1.5 + i * 0.9, 2 - i * 0.5), new THREE.Vector3(22, 3 + i * 1.6, -14 + i * 1.5)];
+      scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), lineMat));
+    }
+
+    // placeholder words at view depth 10..26 m, coloured through the suggested fog like the core will
+    const words = [['iskra', -4, 3.2, 2], ['ognisko', 3.5, 5.0, -4], ['gwiazda', -6, 7.5, -9], ['las', 6, 9.6, -14], ['noc', -1, 10.4, -14], ['księżyc', 1, 2.2, 2]];
+    const ember = new THREE.Color(readToken('--ember', '#f2a54a'));
+    const tmp = new THREE.Color();
+    if (q.get('labels') !== '0') for (const [t, x, y, z] of words) {
+      const el = document.createElement('div'); el.className = 'lbl'; el.textContent = t;
+      const o = new CSS3DObject(el); o.position.set(x, y, z); o.scale.setScalar(0.02); scene.add(o);
+      const d = camera.position.distanceTo(o.position);
+      const f = THREE.MathUtils.clamp((d - sky.fogNear) / (sky.fogFar - sky.fogNear), 0, 1);
+      tmp.copy(ember).lerp(sky.fogColor, f);
+      el.style.color = '#' + tmp.getHexString();
+    }
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight); cssR.setSize(innerWidth, innerHeight);
+      sky.resize(innerWidth, innerHeight);
+    });
+
+    // timing: CPU cost of sky.update, and GPU cost estimate via gl.finish() with / without sky
+    window.measure = async (ms = 2000) => {
+      let n = 0, upd = 0; const t0 = performance.now();
+      await new Promise((res) => { const f = () => { n++; if (performance.now() - t0 < ms) requestAnimationFrame(f); else res(); }; requestAnimationFrame(f); });
+      const gl = renderer.getContext();
+      const timeRender = (vis) => {
+        sky.group.visible = vis; gl.finish();
+        const a = performance.now();
+        for (let i = 0; i < 30; i++) { const u = performance.now(); sky.update(i * 0.016, 0.016); upd += performance.now() - u; renderer.render(scene, camera); }
+        gl.finish(); sky.group.visible = true; return (performance.now() - a) / 30;
+      };
+      timeRender(true); upd = 0;
+      const withSky = timeRender(true), updMs = upd / 30, without = timeRender(false);
+      return { fps: +(n / (ms / 1000)).toFixed(1), renderWithSkyMs: +withSky.toFixed(3), renderWithoutSkyMs: +without.toFixed(3), skyUpdateMs: +updMs.toFixed(4),
+               size: [innerWidth, innerHeight, renderer.getPixelRatio()], calls: renderer.info.render.calls, errors: window.__errors };
+    };
+
+    const clock = new THREE.Clock();
+    renderer.setAnimationLoop(() => {
+      const t = clock.getElapsedTime(), dt = clock.getDelta();
+      sky.update(t, dt);
+      renderer.render(scene, camera);
+      cssR.render(scene, camera);
+    });
+    document.getElementById('hud').textContent = `fog ${'#' + sky.fogColor.getHexString()} ${sky.fogNear}–${sky.fogFar}`;
+  </script>
+</body>
+</html>

@@ -1,7 +1,7 @@
 /*
   OWNERS: three sections, one owner each. Edit only your own section.
     BASE   director
-    SCENE  scene agent
+    SCENE  director
     CARD   card agent
 
   CONTRACT
@@ -93,20 +93,14 @@ button {
   overflow: hidden;
 }
 
-.scene__strings,
-.scene__words,
-.scene__fire {
+.scene__world,
+.scene__words {
   position: absolute;
   inset: 0;
 }
 
-.scene__fire {
-  z-index: var(--z-fire);
-  pointer-events: none;
-}
-
-.scene__strings {
-  z-index: var(--z-strings);
+.scene__world {
+  z-index: var(--z-world);
   pointer-events: none;
 }
 
@@ -120,111 +114,27 @@ button {
   z-index: var(--z-card);
 }
 
-/* === SCENE (scene agent) === */
+/* === SCENE (director) === */
 
-/* Local knobs. Opacities are unitless; durations are multiples of --dur-flicker. */
+/*
+  The night itself (fire, strings, sky) is WebGL, drawn by js/scene.js and js/scene/*.js
+  into the canvas in #scene-world. Only the words are DOM, placed in 3D by CSS3DRenderer.
+  Per word, JS sets: font-size (px, by depth), opacity, and --spark-fog (0 near .. 1 far).
+  JS sets --scene-fog on .scene when sky.js suggests a fog color.
+*/
 .scene {
-  --scene-glow-wide: 0.95;
-  --scene-glow-body: 0.3;
-  --scene-glow-core: 0.34;
-  --scene-grain: 0.035;
+  --scene-fog: var(--fog);
 }
 
-/* --- Firelight: three glows breathing at unrelated rates, so the cycle never repeats --- */
-.scene__glow {
-  position: absolute;
-  left: 50%;
-  border-radius: 50%;
-  transform: translateX(-50%);
-  transform-origin: 50% 50%;
-  opacity: var(--glow-o);
-  will-change: opacity, transform;
-  animation: scene-flicker var(--glow-dur) var(--ease-drift) var(--glow-delay) infinite alternate;
-}
-
-.scene__glow--wide {
-  --glow-o: var(--scene-glow-wide);
-  --glow-dur: calc(var(--dur-flicker) * 1.9);
-  --glow-delay: calc(var(--dur-flicker) * -0.7);
-  width: 180vw;
-  height: 150vh;
-  bottom: -75vh;
-  background: radial-gradient(closest-side, var(--glow-soft) 0%, var(--glow-soft) 25%, transparent 100%);
-}
-
-.scene__glow--body {
-  --glow-o: var(--scene-glow-body);
-  --glow-dur: var(--dur-flicker);
-  --glow-delay: calc(var(--dur-flicker) * -0.3);
-  width: 110vw;
-  height: 84vh;
-  bottom: -42vh;
-  background: radial-gradient(closest-side, var(--fire-deep) 0%, transparent 100%);
-}
-
-.scene__glow--core {
-  --glow-o: var(--scene-glow-core);
-  --glow-dur: calc(var(--dur-flicker) * 0.62);
-  --glow-delay: calc(var(--dur-flicker) * -0.45);
-  width: 62vw;
-  height: 44vh;
-  bottom: -24vh;
-  background: radial-gradient(closest-side, var(--fire-core) 0%, var(--fire) 38%, transparent 100%);
-  animation-name: scene-flicker-core;
-}
-
-@keyframes scene-flicker {
-  0%   { opacity: var(--glow-o); transform: translateX(-50%) scale(1, 1); }
-  23%  { opacity: calc(var(--glow-o) * (1 - var(--flicker-strength) * 0.7)); transform: translateX(-50%) scale(1.01, 0.985); }
-  41%  { opacity: calc(var(--glow-o) * (1 - var(--flicker-strength) * 0.2)); transform: translateX(-50%) scale(0.995, 1.02); }
-  67%  { opacity: calc(var(--glow-o) * (1 - var(--flicker-strength))); transform: translateX(-50%) scale(1.012, 0.975); }
-  84%  { opacity: calc(var(--glow-o) * (1 - var(--flicker-strength) * 0.4)); transform: translateX(-50%) scale(1, 1.01); }
-  100% { opacity: var(--glow-o); transform: translateX(-50%) scale(1, 1); }
-}
-
-/* The core also licks a little from side to side. */
-@keyframes scene-flicker-core {
-  0%   { opacity: var(--glow-o); transform: translateX(-50%) scale(1, 1); }
-  19%  { opacity: calc(var(--glow-o) * (1 - var(--flicker-strength))); transform: translateX(-49%) scale(0.98, 1.03); }
-  46%  { opacity: calc(var(--glow-o) * (1 - var(--flicker-strength) * 0.3)); transform: translateX(-51%) scale(1.02, 0.97); }
-  71%  { opacity: calc(var(--glow-o) * (1 - var(--flicker-strength) * 0.8)); transform: translateX(-50.5%) scale(0.99, 1.04); }
-  100% { opacity: var(--glow-o); transform: translateX(-50%) scale(1, 1); }
-}
-
-/* Faint film grain over the sky (static, so it costs nothing per frame). */
-.scene__grain {
-  position: absolute;
-  inset: 0;
-  opacity: var(--scene-grain);
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='180' height='180'%3E%3Cfilter id='g'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='2' stitchTiles='stitch'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 1 0'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23g)'/%3E%3C/svg%3E");
-  background-size: 180px 180px;
-}
-
-/* --- Guitar strings --- */
-.scene__strings-svg {
-  position: absolute;
-  inset: 0;
+.scene__world canvas {
+  display: block;
   width: 100%;
   height: 100%;
-  overflow: visible;
-}
-
-.scene__string {
-  fill: none;
-  stroke: var(--string);
-  stroke-width: 1;
-  stroke-linecap: round;
-}
-
-.scene__string--bright {
-  stroke: var(--string-bright);
 }
 
 /* --- Sparks: the words --- */
 .spark {
-  position: absolute;
-  left: 0;
-  top: 0;
+  --spark-fog: 0;
   display: block;
   padding: 0.35em 0.6em;
   border-radius: 999px;
@@ -232,13 +142,12 @@ button {
   font-weight: var(--weight-pl);
   line-height: 1;
   white-space: nowrap;
-  color: var(--ember);
+  /* Far words sink into the fog: same hue, less light. */
+  color: color-mix(in oklab, var(--ember), var(--scene-fog) calc(var(--spark-fog) * var(--fog-word-tint) * 100%));
   text-shadow: 0 0 0.6em var(--glow-soft);
   opacity: 0;
   isolation: isolate;
   will-change: transform, opacity;
-  user-select: none;
-  -webkit-user-select: none;
   -webkit-tap-highlight-color: transparent;
 }
 
@@ -304,12 +213,10 @@ button {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .scene__glow,
   .spark.is-rare::before {
     animation: none;
   }
 }
-
 
 /* === CARD (card agent) === */
 
