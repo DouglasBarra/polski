@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iskry dev: journal</title>
+  <!-- ?empty=1 empty state · ?open=1 open on load · ?keep=1 keep this page's stored memory -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..600&family=Lora:ital,wght@0,400..600;1,400..600&display=swap&subset=latin-ext" rel="stylesheet">
+  <link rel="stylesheet" href="../css/tokens.css">
+  <link rel="stylesheet" href="../css/main.css">
+  <link rel="stylesheet" href="../css/journal.css">
+  <style>
+    #hud { position: fixed; left: 12px; top: 10px; font: 12px/1.6 monospace; color: var(--muted); opacity: .7; }
+    #hud button { font: inherit; text-decoration: underline; color: var(--ember); }
+    .fake-fire { position: fixed; left: 50%; bottom: -14vh; width: 60vw; height: 50vh; transform: translateX(-50%);
+      background: radial-gradient(ellipse at 50% 70%, var(--glow-strong), var(--glow-soft) 35%, transparent 70%); pointer-events: none; }
+    .fake-word { position: fixed; font-family: var(--font-pl); color: var(--ember); }
+  </style>
+  <script>
+    // Seed this origin's memory before memory.js loads (dev page only).
+    (function () {
+      var q = new URLSearchParams(location.search);
+      if (q.get("keep")) return;
+      var KEY = "iskry.memory.v1", DAY = 864e5, now = Date.now(), words = {};
+      function seed(id, count, daysAgo) {
+        var d = [];
+        for (var i = daysAgo.length - 1; i >= 0; i--) {
+          var t = new Date(now - daysAgo[i] * DAY - 4 * 36e5);
+          d.push(t.getFullYear() + "-" + String(t.getMonth() + 1).padStart(2, "0") + "-" + String(t.getDate()).padStart(2, "0"));
+        }
+        words[id] = { c: count, f: now - Math.max.apply(null, daysAgo) * DAY, l: now - Math.min.apply(null, daysAgo) * DAY, d: d };
+      }
+      if (!q.get("empty")) {
+        seed("ogien", 7, [6, 3, 1]);       // golden
+        seed("noc", 6, [5, 2, 0]);         // golden
+        seed("iskra", 2, [1]);
+        seed("gitara", 1, [0]);
+        seed("kot", 3, [4, 0]);
+        seed("koc", 1, [2]);
+        seed("herbata", 5, [8, 4, 1]);     // golden
+        seed("chleb", 1, [0]);
+        seed("wiatr", 2, [3]);
+        seed("sowa", 1, [0]);
+        seed("spokoj", 1, [1]);
+        seed("tesknota", 2, [2, 0]);
+        seed("babcia", 1, [0]);
+        seed("dobranoc", 4, [3, 0]);
+        seed("tak", 3, [2, 1]);
+        seed("dziekuje", 1, [0]);
+        seed("unknown-id", 2, [1]);        // must be skipped by the journal
+      }
+      try { localStorage.setItem(KEY, JSON.stringify({ v: 1, words: words })); } catch (e) {}
+    })();
+  </script>
+</head>
+<body>
+  <div id="hud">journal · ?empty=1 · ?open=1 · <button type="button" id="catch">catch a random word</button></div>
+  <div class="fake-fire" aria-hidden="true"></div>
+  <span class="fake-word" style="left: 18vw; top: 30vh; font-size: 2.4rem">ogień</span>
+  <span class="fake-word" style="left: 46vw; top: 44vh; font-size: 1.6rem; opacity: .8">gwiazda</span>
+  <span class="fake-word" style="left: 70vw; top: 24vh; font-size: 2rem">wiatr</span>
+
+  <div id="card-root" hidden></div>
+  <div id="journal-root"></div>
+
+  <script src="../data/words.js"></script>
+  <script src="../js/memory.js"></script>
+  <script src="../js/journal.js"></script>
+  <script>
+    window.__errors = [];
+    window.addEventListener("error", function (e) { window.__errors.push(String(e.message)); });
+    var byId = {};
+    Iskry.WORDS.forEach(function (w) { byId[w.id] = w; });
+    Iskry.journal.init(document.getElementById("journal-root"), byId);
+    document.getElementById("catch").addEventListener("click", function () {
+      var w = Iskry.WORDS[Math.floor(Math.random() * Iskry.WORDS.length)];
+      Iskry.memory.record(w.id);
+    });
+    if (new URLSearchParams(location.search).get("open")) document.querySelector(".journal-toggle").click();
+  </script>
+</body>
+</html>

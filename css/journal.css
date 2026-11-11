@@ -1,0 +1,276 @@
+/*
+  OWNER: memory agent. The journal: a quiet side panel of the words you have caught.
+
+  CONTRACT
+  - Tokens from css/tokens.css only. Local custom properties live on .journal-root.
+  - Selectors start with .journal (journal-root, journal-toggle, journal, journal__*).
+  - Animate transform and opacity only. Reduced motion: a fade, no slide.
+  - Sits below the card (z-index under --z-card), so an open card always wins.
+*/
+
+.journal-root {
+  --journal-width: min(21rem, calc(100vw - 3rem));
+  --journal-pad: 1.75rem;
+  --journal-edge: 1.1rem;                                  /* toggle distance from the corner */
+  --journal-dur-in: calc(var(--dur-card-open) * 1.4);
+  --journal-dur-out: var(--dur-card-close);
+  --journal-z: calc(var(--z-card) - 1);
+}
+
+/* --- Toggle: a small book glyph in the corner, barely there until you look --- */
+.journal-toggle {
+  position: fixed;
+  right: var(--journal-edge);
+  bottom: var(--journal-edge);
+  z-index: var(--journal-z);
+  display: grid;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+  border-radius: 50%;
+  color: var(--ember-dim);
+  opacity: 0.55;
+  transition:
+    opacity var(--dur-hover) var(--ease-in-out),
+    color var(--dur-hover) var(--ease-in-out);
+}
+
+.journal-toggle svg {
+  display: block;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.4;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.journal-toggle:hover,
+.journal-toggle:focus-visible,
+.journal-toggle[aria-expanded="true"] {
+  color: var(--ember-bright);
+  opacity: 1;
+}
+
+.journal-toggle:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+}
+
+/* --- Panel --- */
+.journal {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  z-index: var(--journal-z);
+  display: flex;
+  flex-direction: column;
+  width: var(--journal-width);
+  color: var(--cream);
+  background-color: var(--card-bg);
+  background-color: color-mix(in srgb, var(--card-bg) 88%, transparent);
+  background-image:
+    radial-gradient(ellipse 120% 40% at 100% 100%, var(--glow-soft), transparent 70%),
+    linear-gradient(to bottom, var(--night-deep), transparent 30%);
+  -webkit-backdrop-filter: blur(14px) saturate(1.15);
+  backdrop-filter: blur(14px) saturate(1.15);
+  border-left: 1px solid var(--card-border);
+  box-shadow: var(--card-shadow);
+  visibility: hidden;
+  opacity: 0;
+  transform: translateX(100%);
+  transition:
+    transform var(--journal-dur-out) var(--ease-in-soft),
+    opacity var(--journal-dur-out) var(--ease-in-soft),
+    visibility 0s linear var(--journal-dur-out);
+}
+
+.journal.is-open {
+  visibility: visible;
+  opacity: 1;
+  transform: none;
+  transition:
+    transform var(--journal-dur-in) var(--ease-out-soft),
+    opacity var(--journal-dur-in) var(--ease-out-soft),
+    visibility 0s;
+}
+
+.journal__head {
+  position: relative;
+  flex: none;
+  padding: var(--journal-pad) calc(var(--journal-pad) + 2rem) 1rem var(--journal-pad);
+}
+
+.journal__title {
+  margin: 0;
+  font-family: var(--font-en);
+  font-size: var(--size-small);
+  font-weight: 400;
+  letter-spacing: var(--tracking-label);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+/* The title is only a landing point for focus (tabindex -1): a soft brightening, no ring. */
+.journal__title {
+  transition: color var(--dur-hover) var(--ease-in-out);
+}
+
+.journal__title:focus,
+.journal__title:focus-visible {
+  outline: none;
+  color: var(--ember-bright);
+}
+
+/* --- Close: the same thin cross as the card --- */
+.journal__close {
+  position: absolute;
+  top: calc(var(--journal-pad) - 0.8rem);
+  right: calc(var(--journal-pad) - 0.9rem);
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: 50%;
+  color: var(--muted);
+  opacity: 0.65;
+  transition: opacity var(--dur-hover) var(--ease-in-out), color var(--dur-hover) var(--ease-in-out);
+}
+
+.journal__close::before,
+.journal__close::after {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 0.9rem;
+  height: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
+}
+
+.journal__close::before {
+  transform: translate(-50%, -50%) rotate(45deg);
+}
+
+.journal__close::after {
+  transform: translate(-50%, -50%) rotate(-45deg);
+}
+
+.journal__close:hover,
+.journal__close:focus-visible {
+  color: var(--ember-bright);
+  opacity: 1;
+}
+
+/* --- Body --- */
+.journal__body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  scrollbar-color: var(--card-border) transparent;
+  padding: 0 var(--journal-pad) var(--journal-pad);
+  -webkit-mask-image: linear-gradient(to bottom, transparent 0, var(--night) 1rem, var(--night) calc(100% - 2rem), transparent 100%);
+  mask-image: linear-gradient(to bottom, transparent 0, var(--night) 1rem, var(--night) calc(100% - 2rem), transparent 100%);
+}
+
+.journal__empty {
+  margin: 1.25rem 0 0;
+  font-family: var(--font-en);
+  font-style: italic;
+  font-size: var(--size-card-example);
+  line-height: var(--leading);
+  color: var(--muted);
+  text-wrap: balance;
+}
+
+.journal__group {
+  margin-top: 1.4rem;
+}
+
+.journal__theme {
+  display: flex;
+  align-items: center;
+  gap: 0.75em;
+  margin: 0 0 0.5rem;
+  font-family: var(--font-en);
+  font-style: italic;
+  font-size: var(--size-small);
+  font-weight: 400;
+  color: var(--ember-dim);
+}
+
+/* A hairline that fades out, like a string. */
+.journal__theme::after {
+  content: "";
+  flex: 1 1 auto;
+  height: 1px;
+  background: linear-gradient(90deg, var(--card-border), transparent);
+}
+
+.journal__list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.journal__entry {
+  display: flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  column-gap: 0.7em;
+  padding: 0.3rem 0;
+  line-height: 1.3;
+}
+
+.journal__pl {
+  font-family: var(--font-pl);
+  font-weight: var(--weight-pl);
+  font-size: var(--size-card-meaning);
+  color: var(--ember);
+}
+
+.journal__en {
+  font-family: var(--font-en);
+  font-style: italic;
+  font-size: var(--size-small);
+  color: var(--muted);
+}
+
+/* Golden: an old friend. Warmer colour, a soft glow and one small ember beside it. */
+.journal__entry.is-golden .journal__pl {
+  color: var(--gold);
+  text-shadow: 0 0 14px var(--glow-strong);
+}
+
+.journal__entry.is-golden .journal__pl::after {
+  content: "";
+  display: inline-block;
+  width: 0.22em;
+  height: 0.22em;
+  margin-left: 0.4em;
+  vertical-align: 0.5em;
+  border-radius: 50%;
+  background: var(--gold);
+  box-shadow: 0 0 6px 1px var(--glow-strong);
+  opacity: 0.85;
+}
+
+.journal__sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+  border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .journal,
+  .journal.is-open {
+    transform: none;
+  }
+}
