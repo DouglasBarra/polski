@@ -1,43 +1,74 @@
 /*
-  Iskry · sky.js — the world around the fire.
-  OWNER: Opus worker "sky". Interface: scratchpad scene-modules-spec.md.
+  Iskry · sky.js — the night and the land around the fire, beyond the trees.
+  OWNER: Opus worker "sky". Interface: CONTRACT.md + scratchpad scene-modules-spec.md.
 
-  createSky(ctx, opts) -> { group, update, resize, dispose, fogColor, fogNear, fogFar }
+  createSky(ctx, opts) -> { group, update, resize, dispose, setMoon, setTimeOfDay,
+                            fogColor, fogNear, fogFar }
 
   What it draws (5 draw calls, no textures):
-    1. dome      gradient sky, horizon haze, fire/village glow, veiled crescent moon, faint Milky Way
-    2. stars     a few hundred points, mostly faint, slow twinkle, fading into the haze
-    3. land      ONE merged mesh: far ridge, rolling hills, pine/spruce treeline, near junipers and young pines
-    4. ground    dark meadow disc with a faint warm pool under the fire
-    5. mist      two low haze bands drifting left -> right with the wind
+    1. dome    sky gradient, horizon haze, fire glow ahead, village glow (+ optional moon-lit air)
+    2. land    ONE merged mesh, all terrain beyond the tree row (trees.js owns every tree):
+                 a low wooded rise behind the treeline (66 m, open in the valley window),
+                 the village on the far lake shore (157 m), two forested hill ranges
+                 (190 m, 250 m), Giewont, the "sleeping knight" (325 m), and the Tatras (360 m)
+    3. ground  the meadow and valley floor, one disc at y = 0
+    4. lake    a calm lake in the valley (82-150 m), reflecting the sky and three village windows
+    5. mist    one drifting veil of valley mist in front of the hills
 
-  All shaders are dithered in output (sRGB) space, so the dark gradients never band,
-  whether the renderer draws to the canvas or to a linear render target.
+  Stars, the Milky Way (stars.js) and the moon (moon.js) are other modules. A faint
+  moon-lit brightening of the air is available through setMoon(direction, illumination).
+
+  Aerial perspective: land, ground and lake share one tone function of world position.
+  Far things fade toward the sky colour seen in the same direction (cooler with distance),
+  and a warm low-lying haze, drifting with the wind, lifts the base of everything. Wherever
+  two surfaces meet they evaluate the same point, so there is no seam.
+
+  All shaders dither in output (sRGB) space, so the dark gradients never band.
   Nothing here sets scene.fog, background, tone mapping or renderer state.
+
+  Draw order (opaque pass unless noted): dome -100 (no depth write), land -50 (writes depth),
+  ground -45 (NO depth write, so fire.js glow billboards reaching below y = 0 leave no
+  hard line), lake -44 (transparent pass, no depth write), mist -40 (transparent pass).
 */
 import * as THREE from 'three';
 
 // ---------------------------------------------------------------- tunables
 const DEFAULTS = {
-  horizonY: 0,          // world y of the ground plane / horizon
-  radius: 90,           // sky dome radius (camera far plane must exceed it)
+  horizonY: 0,             // world y of the ground plane / horizon
+  radius: 90,              // sky dome radius (drawn first without depth, so any size works)
   center: { x: 0, z: 12 }, // xz the landscape arcs around (camera default)
-  seed: 7,              // deterministic landscape
-  starCount: 1100,       // reducedMotion uses ~60%
-  moon: true,
-  milkyWay: true,
+  seed: 7,                 // deterministic landscape
   mist: true,
-  // landscape distances from `center`, metres
-  nearDistance: 36,
-  treelineDistance: 53,
-  hillsDistance: 74,
-  ridgeDistance: 85,
-  // the treeline dips behind the fire so the warm haze shows through
-  gapWidth: 0.26,       // radians
-  gapDepth: 0.42,       // 0..1 height reduction at the centre
-  treeHeight: 7.2,      // metres, typical front-row treeline height
-  firePosition: { x: -3, z: -2 }, // warm pool on the ground + warm side of the land
+  // the valley window: the rise behind the trees opens here, onto lake, village and mountains
+  valleyAz: 0.17,          // radians, + = right of straight ahead
+  valleyHalf: 0.3,
+  // distances from `center`, metres
+  riseDistance: 66,
+  lakeNear: 72, lakeFar: 150,
+  villageDistance: 157, villageAz: 0.24,
+  hillsDistance: 190,
+  hills2Distance: 250,
+  giewontDistance: 290, giewontAz: 0.08,
+  tatraDistance: 360,
+  firePosition: { x: -3, z: -2 }, // warm side of the haze + warm pool on the ground
+  // compass (shared with stars.js): the camera's -z faces bearing 120 deg (ESE).
+  headingDeg: 120,
+  // sunrise / sunset bearings (deg); null = computed for today's date at latitude 52 N
+  sunriseBearingDeg: null,
+  sunsetBearingDeg: null,
+  date: null,
 };
+
+// Bearing of sunrise for a date at a latitude (sunset is 360 minus it). Cheap and
+// good to a few degrees: solar declination from the day of the year.
+function sunriseBearing(date, latDeg = 52) {
+  const d = date instanceof Date ? date : new Date();
+  const doy = (Date.UTC(d.getFullYear(), d.getMonth(), d.getDate()) - Date.UTC(d.getFullYear(), 0, 0)) / 864e5;
+  const decl = -23.44 * Math.cos((2 * Math.PI * (doy + 10)) / 365);
+  const c = Math.sin((decl * Math.PI) / 180) / Math.cos((latDeg * Math.PI) / 180);
+  return (Math.acos(Math.max(-1, Math.min(1, c))) * 180) / Math.PI;
+}
+const SPAN = 1.2; // radians each side of straight ahead (32:9 screens see about +-0.9)
 
 // --------------------------------------------------------------- utilities
 function mulberry32(a) {
@@ -49,7 +80,7 @@ function mulberry32(a) {
   };
 }
 
-// Seeded 1D value noise + fbm (for ridgelines and treeline density).
+// Seeded 1D value noise + fbm (for ridgelines).
 function makeNoise1D(rng) {
   const N = 512;
   const table = new Float32Array(N);
@@ -77,6 +108,8 @@ function colorFrom(ctx, token, fallback) {
   try { c.set(typeof v === 'string' ? v.trim() : v); } catch (e) { c.set(fallback); }
   return c;
 }
+
+const smoothstep = (a, b, x) => { const t = Math.min(1, Math.max(0, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
 
 // --------------------------------------------------------------- GLSL bits
 const GLSL_COMMON = /* glsl */ `
@@ -109,6 +142,44 @@ const GLSL_COMMON = /* glsl */ `
   }
 `;
 
+// The sky's colour in a direction. The dome draws it; the land fades toward it.
+const GLSL_SKY = /* glsl */ `
+  uniform vec3 uTop, uMid, uLow, uHaze, uGlow, uMoonCol, uMoonDir;
+  uniform vec2 uVillage;      // azimuth (rad), strength
+  uniform float uFireAz, uMoonIllum;
+  uniform vec3 uDuskCol, uDawnCol;
+  uniform vec2 uDusk, uDawn;  // azimuth of the sunset / sunrise side (rad), amount 0..1
+  vec3 skyColor(vec3 dir) {
+    float h = max(dir.y, 0.0);                        // sine of elevation
+    float az = atan(dir.x, -dir.z);                   // 0 = straight ahead (-z), + = right
+    // vertical gradient: haze -> low -> mid -> top, eased so the warm band hugs the horizon
+    vec3 col = mix(uHaze, uLow, smoothstep(0.0, 0.16, h));
+    col = mix(col, uMid, smoothstep(0.06, 0.42, h));
+    col = mix(col, uTop, smoothstep(0.30, 0.95, h));
+    // warm glow of the fire and the low air ahead, and the village beyond the lake
+    float ga = az - uFireAz * 0.6;
+    col += uGlow * exp(-ga * ga / 0.55) * exp(-h * 9.0) * 0.55;
+    float dv = az - uVillage.x;
+    col += uGlow * uVillage.y * exp(-dv * dv / 0.012) * exp(-h * 30.0);
+    // time of day: a low afterglow on the sunset side, a cool band on the sunrise side.
+    // Both hug the horizon so the words' band above stays as dark as at night.
+    if (uDusk.y > 0.0) {
+      float ds = mod(az - uDusk.x + 3.14159265, 6.2831853) - 3.14159265;
+      col += uDuskCol * uDusk.y * exp(-ds * ds / 1.6) * exp(-h * 24.0);   // wide: the sun may be behind us
+    }
+    if (uDawn.y > 0.0) {
+      float dw = mod(az - uDawn.x + 3.14159265, 6.2831853) - 3.14159265;
+      col += uDawnCol * uDawn.y * exp(-dw * dw / 0.9) * exp(-h * 20.0);
+    }
+    // optional moon-lit air (moon.js draws the moon itself)
+    if (uMoonIllum > 0.0) {
+      float ang = sqrt(max(2.0 * (1.0 - dot(dir, uMoonDir)), 0.0));
+      col += uMoonCol * uMoonIllum * (exp(-ang * 2.5) * 0.03 + exp(-ang * 9.0) * 0.035);
+    }
+    return col;
+  }
+`;
+
 // ------------------------------------------------------------------- dome
 const DOME_VERT = /* glsl */ `
   varying vec3 vDir;
@@ -120,166 +191,141 @@ const DOME_VERT = /* glsl */ `
 `;
 const DOME_FRAG = /* glsl */ `
   precision highp float;
-  uniform vec3 uTop, uMid, uLow, uHaze, uGlow, uMoonCol, uMilky;
-  uniform vec3 uMoonDir, uMoonRight, uMoonUp;
-  uniform vec3 uBandN, uBandA, uBandB;
-  uniform float uMoonOn, uMilkyOn, uMoonSize;
-  uniform vec2 uVillage;      // azimuth (rad), strength
-  uniform float uFireAz;
   varying vec3 vDir;
   ${GLSL_COMMON}
+  ${GLSL_SKY}
   void main() {
-    vec3 dir = normalize(vDir);
-    float e = dir.y;                                  // sine of elevation
-    float az = atan(dir.x, -dir.z);                   // 0 = straight ahead (-z), + = right
-
-    // vertical gradient: haze -> low -> mid -> top, eased so the warm band hugs the horizon
-    float h = max(e, 0.0);
-    vec3 col = mix(uHaze, uLow, smoothstep(0.0, 0.16, h));
-    col = mix(col, uMid, smoothstep(0.06, 0.42, h));
-    col = mix(col, uTop, smoothstep(0.30, 0.95, h));
-
-    // warm glow of the fire and the low air ahead, and a far village to the right
-    float ga = az - uFireAz * 0.6;
-    float ahead = exp(-ga * ga / 0.55);
-    col += uGlow * ahead * exp(-h * 9.0) * 0.55;
-    float dv = az - uVillage.x;
-    col += uGlow * uVillage.y * exp(-dv * dv / 0.035) * exp(-h * 26.0);
-
-    // faint Milky Way: a soft, broken band, kept off the horizon haze
-    if (uMilkyOn > 0.5) {
-      float bd = dot(dir, uBandN);
-      float mask = exp(-bd * bd / 0.018);
-      if (mask > 0.01) {
-        float phi = atan(dot(dir, uBandB), dot(dir, uBandA));
-        vec2 q = vec2(phi * 7.0, bd * 26.0);
-        float n = vnoise(q) * 0.55 + vnoise(q * 2.3 + 4.1) * 0.3 + vnoise(q * 5.1 + 9.7) * 0.15;
-        float rift = 1.0 - 0.75 * exp(-pow((bd - 0.03) * 22.0, 2.0)) * smoothstep(0.45, 0.75, vnoise(q * 0.7 + 2.0));
-        col += uMilky * mask * smoothstep(0.3, 0.85, n) * rift * smoothstep(0.12, 0.5, h);
-      }
-    }
-
-    // a low crescent moon veiled by haze, with a wide soft halo
-    if (uMoonOn > 0.5) {
-      float cm = dot(dir, uMoonDir);
-      float ang = sqrt(max(2.0 * (1.0 - cm), 0.0));
-      float veil = mix(0.55, 1.0, smoothstep(0.05, 0.35, h));
-      col += uMoonCol * (exp(-ang * 7.0) * 0.07 + exp(-ang * 30.0) * 0.10) * veil;
-      if (ang < uMoonSize * 1.6 && cm > 0.0) {
-        vec2 p = vec2(dot(dir, uMoonRight), dot(dir, uMoonUp)) / uMoonSize;
-        float r = length(p);
-        float aa = 0.06;
-        float disc = 1.0 - smoothstep(1.0 - aa, 1.0 + aa, r);
-        float shadow = 1.0 - smoothstep(0.98 - aa, 0.98 + aa, length(p - vec2(-0.42, 0.16)));
-        float lit = disc * (1.0 - shadow);
-        float mottle = 0.86 + 0.14 * vnoise(p * 3.1 + 7.0);
-        col += uMoonCol * (lit * 0.95 * mottle + disc * shadow * 0.035) * veil;
-      }
-    }
-
-    gl_FragColor = ditheredOutput(col, 1.0);
+    gl_FragColor = ditheredOutput(skyColor(normalize(vDir)), 1.0);
   }
 `;
 
-// ------------------------------------------------------------------ stars
-const STAR_VERT = /* glsl */ `
-  attribute float aBright;
-  attribute float aPhase;
-  attribute vec3 aColor;
-  uniform float uTime, uPx, uTwinkle;
-  varying vec3 vColor;
-  varying float vAlpha;
-  void main() {
-    vec3 d = normalize(position);
-    float fade = smoothstep(0.04, 0.34, d.y);          // sink into the horizon haze
-    float amp = uTwinkle * (0.18 + 0.32 * (1.0 - d.y)); // scintillate more when low
-    float tw = 1.0 - amp * (0.5 + 0.5 * sin(uTime * (0.45 + aPhase * 0.9) + aPhase * 37.0))
-                         * (0.6 + 0.4 * sin(uTime * 0.23 + aPhase * 91.0));
-    vAlpha = aBright * fade * tw;
-    vColor = aColor;
-    gl_PointSize = (2.2 + 3.8 * aBright * aBright) * uPx;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-  }
-`;
-const STAR_FRAG = /* glsl */ `
-  precision highp float;
-  varying vec3 vColor;
-  varying float vAlpha;
-  void main() {
-    vec2 p = gl_PointCoord * 2.0 - 1.0;
-    float r2 = dot(p, p);
-    if (r2 > 1.0) discard;
-    float core = exp(-r2 * 5.0) + 0.25 * exp(-r2 * 2.2) * smoothstep(1.0, 0.4, r2);
-    vec3 c = vColor * core * vAlpha;
-    gl_FragColor = linearToOutputTexel(vec4(c, 1.0));
-  }
-`;
-
-// ------------------------------------------------------------------- land
-const LAND_VERT = /* glsl */ `
-  attribute float aDepth;
-  varying float vDepth;
+// ------------------------------------------------------- world (land, ground, lake)
+const GLSL_WORLD = /* glsl */ `
+  uniform vec3 uGroundNear, uDark, uWarm, uCool, uWinCol;
+  uniform vec2 uCenter;
+  uniform float uTime, uMistK;
   varying vec3 vLocal;
+  varying vec3 vWorld;
+  // Tone of a surface of colour 'base' at local position p (world position wp).
+  vec3 worldTone(vec3 p, vec3 wp, vec3 base, out float dist, out float aerial) {
+    vec2 rel = p.xz - uCenter;
+    dist = length(rel);
+    // aerial perspective: fade toward the sky seen in the same direction, cooler far away
+    vec3 sky = skyColor(normalize(wp - cameraPosition));
+    aerial = 0.86 * pow(clamp((dist - 25.0) / 400.0, 0.0, 1.0), 0.8);  // even steps per layer
+    vec3 air = sky * mix(vec3(1.0), uCool, smoothstep(150.0, 360.0, dist));
+    vec3 col = mix(base, air, aerial);
+    // warm low-lying haze, warmer toward the fire. It grows quickly close by and
+    // saturates far away, so on screen the ground's gradient spreads over its whole
+    // height instead of piling up at the treeline; it rises higher in the far valley.
+    float fa = atan(rel.x, -rel.y) - uFireAz;
+    vec3 haze = uHaze + uWarm * exp(-fa * fa / 0.3);
+    float t = clamp((dist - 36.0) / 50.0, 0.0, 1.0);
+    float lowK = 0.62 * (1.0 - exp(-max(dist - 6.0, 0.0) / 30.0));
+    float low = lowK * (1.0 - smoothstep(-0.5, 2.2 + 5.5 * t, p.y));
+    // slow drifting thickness (wind +x), low frequency in z so grazing views do not streak
+    float n = vnoise(vec2((p.x - uTime * 0.25) * 0.05, p.z * 0.035 + p.y * 0.12));
+    n = 0.6 * n + 0.4 * vnoise(vec2((p.x - uTime * 0.3) * 0.12 + 5.3, p.z * 0.07 - p.y * 0.2));
+    low *= 1.0 + uMistK * (n - 0.5) * 0.9;
+    return mix(col, haze, clamp(low, 0.0, 1.0));
+  }
+`;
+const WORLD_VERT = /* glsl */ `
+  attribute float aKind;
+  varying vec3 vLocal;
+  varying vec3 vWorld;
+  varying float vKind;
   void main() {
-    vDepth = aDepth;
     vLocal = position;
-    gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+    vKind = aKind;
+    vec4 wp = modelMatrix * vec4(position, 1.0);
+    vWorld = wp.xyz;
+    gl_Position = projectionMatrix * viewMatrix * wp;
   }
 `;
 const LAND_FRAG = /* glsl */ `
   precision highp float;
-  uniform vec3 uNear, uMid, uFar, uHaze, uWarm;
-  uniform vec2 uCenter;
-  uniform float uWarmK, uFireAz;
-  varying float vDepth;
-  varying vec3 vLocal;
+  varying float vKind;
   ${GLSL_COMMON}
+  ${GLSL_SKY}
+  ${GLSL_WORLD}
   void main() {
-    float d = vDepth;
-    vec3 col = d < 0.5 ? mix(uNear, uMid, d * 2.0) : mix(uMid, uFar, (d - 0.5) * 2.0);
-    // low air holds more haze: lift the bases of every layer, more so far away
-    float y = vLocal.y;
-    float lowHaze = (1.0 - smoothstep(-0.5, 2.5 + d * 5.0, y)) * (0.10 + 0.45 * d);
-    col = mix(col, uHaze, lowHaze);
-    // faint warmth on the layers facing the fire (strongest ahead and near)
-    vec2 rel = vLocal.xz - uCenter;
-    float az = atan(rel.x, -rel.y);
-    float fa = az - uFireAz;
-    float warm = exp(-fa * fa / 0.22) * (1.0 - d) * (1.0 - smoothstep(0.0, 7.0, y));
-    col += uWarm * warm * uWarmK;
+    float dist, aerial;
+    vec3 col = worldTone(vLocal, vWorld, uDark, dist, aerial);
+    if (vKind > 0.5) col = mix(uWinCol, col, aerial * 0.45);   // a lit window, barely veiled
     gl_FragColor = ditheredOutput(col, 1.0);
   }
 `;
-
-// ----------------------------------------------------------------- ground
 const GROUND_FRAG = /* glsl */ `
   precision highp float;
-  uniform vec3 uNear, uFar, uHaze, uWarm;
-  uniform vec2 uCenter, uFire;
+  uniform vec2 uFire;
   uniform float uPool;
-  varying vec3 vLocal;
   ${GLSL_COMMON}
+  ${GLSL_SKY}
+  ${GLSL_WORLD}
   void main() {
-    float dist = length(vLocal.xz - uCenter);
-    float s = smoothstep(3.0, 70.0, dist);
-    vec3 col = mix(uNear, uFar, pow(s, 0.8));
-    col = mix(col, uHaze, smoothstep(6.0, 75.0, dist) * 0.8);
-    // gentle unevenness so the meadow is not a flat sheet
-    col *= 0.9 + 0.2 * vnoise(vLocal.xz * 0.35);
+    vec2 rel = vLocal.xz - uCenter;
+    vec3 base = mix(uGroundNear, uDark, smoothstep(10.0, 40.0, length(rel)));
+    float dist, aerial;
+    vec3 col = worldTone(vLocal, vWorld, base, dist, aerial);
+    // gentle unevenness close by, so the meadow is not a flat sheet (gone by 34 m)
+    col *= 1.0 + (0.2 * vnoise(vLocal.xz * 0.35) - 0.1) * (1.0 - smoothstep(16.0, 34.0, dist));
+    // a faint warm pool around the fire (fire.js adds the bright part)
     float fd = length(vLocal.xz - uFire);
-    col += uWarm * uPool * exp(-fd * fd / 30.0);
+    col += uWarm * uPool * exp(-fd * fd / 40.0);
     gl_FragColor = ditheredOutput(col, 1.0);
+  }
+`;
+const LAKE_FRAG = /* glsl */ `
+  precision highp float;
+  uniform vec2 uLakeR, uLakeAz;     // near/far shore distance, azimuth range
+  uniform vec3 uWin[3];             // lit windows (world), mirrored in the water
+  uniform float uWaterY;
+  ${GLSL_COMMON}
+  ${GLSL_SKY}
+  ${GLSL_WORLD}
+  void main() {
+    vec2 rel = vLocal.xz - uCenter;
+    float D = length(rel);
+    float az = atan(rel.x, -rel.y);
+    // an organic shoreline
+    float nearS = uLakeR.x + 9.0 * vnoise(vec2(az * 13.0, 1.7));
+    float farS = uLakeR.y - 7.0 * vnoise(vec2(az * 9.0, 8.3));
+    float m = smoothstep(nearS, nearS + 5.0, D) * (1.0 - smoothstep(farS - 5.0, farS, D))
+            * smoothstep(uLakeAz.x, uLakeAz.x + 0.08, az) * (1.0 - smoothstep(uLakeAz.y - 0.08, uLakeAz.y, az));
+    if (m < 0.002) discard;
+    vec3 v = normalize(vWorld - cameraPosition);
+    float vaz = atan(v.x, -v.z);
+    float vel = v.y / length(v.xz);
+    // the sky mirrored, broken into long, slow ripples
+    float rip = vnoise(vec2(D * 0.7 - uTime * 0.12, az * 60.0));
+    vec3 col = skyColor(vec3(v.x, -v.y, v.z)) * (1.05 + 0.25 * rip);
+    // village windows: little warm streaks, stretched toward us by the ripples
+    float glow = 0.0;
+    for (int i = 0; i < 3; i++) {
+      vec3 w = uWin[i] - cameraPosition;
+      w.y = 2.0 * uWaterY - uWin[i].y - cameraPosition.y;
+      float dA = (vaz - atan(w.x, -w.z)) / 0.0024;
+      float dE = vel - w.y / length(w.xz);
+      float e = dE > 0.0 ? dE / 0.0012 : dE / 0.005;
+      float shimmer = 0.5 + 0.5 * vnoise(vec2(D * 1.6 - uTime * 0.35, float(i) * 13.0 + vel * 900.0));
+      glow += exp(-dA * dA - e * e) * shimmer;
+    }
+    col += uWinCol * glow * 0.45;
+    // the same air as the land, a little less of the low haze so the water still reads
+    float dist, aerial;
+    vec3 hazed = worldTone(vLocal, vWorld, col, dist, aerial);
+    col = mix(hazed, col, 0.3);
+    gl_FragColor = ditheredOutput(col, m);
   }
 `;
 
 // ------------------------------------------------------------------- mist
 const MIST_VERT = /* glsl */ `
   attribute vec2 aMist;   // x: arc coordinate (m), y: 0..1 height in band
-  attribute float aLayer;
   varying vec2 vMist;
-  varying float vLayer;
   void main() {
-    vMist = aMist; vLayer = aLayer;
+    vMist = aMist;
     gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
   }
 `;
@@ -288,16 +334,14 @@ const MIST_FRAG = /* glsl */ `
   uniform vec3 uColor;
   uniform float uTime, uOpacity;
   varying vec2 vMist;
-  varying float vLayer;
   ${GLSL_COMMON}
   void main() {
-    float speed = mix(0.32, 0.18, vLayer);            // m/s, wind left -> right
-    vec2 q = vec2((vMist.x - uTime * speed) * 0.045, vMist.y * 1.3 + vLayer * 7.0);
+    vec2 q = vec2((vMist.x - uTime * 0.3) * 0.03, vMist.y * 1.3 + 7.0);
     float n = vnoise(q) * 0.6 + vnoise(q * 2.7 + vec2(3.1, 1.7) - vec2(uTime * 0.004, 0.0)) * 0.4;
     float body = smoothstep(0.3, 0.8, n);
-    float shape = smoothstep(0.05, 0.5, vMist.y) * (1.0 - smoothstep(0.4, 1.0, vMist.y));
-    float a = body * shape * uOpacity * mix(1.0, 0.8, vLayer);
-    gl_FragColor = ditheredOutput(uColor, a);
+    // fades out at the ground and at the top: no edge where it meets anything
+    float shape = smoothstep(0.0, 0.45, vMist.y) * (1.0 - smoothstep(0.35, 1.0, vMist.y));
+    gl_FragColor = ditheredOutput(uColor, body * shape * uOpacity);
   }
 `;
 
@@ -311,19 +355,28 @@ export function createSky(ctx, opts = {}) {
   const C = o.center;
   const fireAz = Math.atan2(o.firePosition.x - C.x, -(o.firePosition.z - C.z));
 
-  // palette from tokens (strings), lightly shaped per layer
+  // palette from tokens
   const tNightDeep = colorFrom(ctx, '--night-deep', '#130d0a');
   const tNight = colorFrom(ctx, '--night', '#1a120d');
   const tNightWarm = colorFrom(ctx, '--night-warm', '#26180f');
   const tHaze = colorFrom(ctx, '--night-haze', '#3a2214');
   const tFire = colorFrom(ctx, '--fire', '#f0842c');
+  const tFireCore = colorFrom(ctx, '--fire-core', '#ffb45a');
+  const tFireDeep = colorFrom(ctx, '--fire-deep', '#b8481a');
+  // compass bearing (deg, 0 = north, 90 = east) -> our azimuth (rad, 0 = -z, + = right)
+  const bearingToAz = (deg) => {
+    let a = ((deg - o.headingDeg) * Math.PI) / 180;
+    a = Math.atan2(Math.sin(a), Math.cos(a));
+    return a;
+  };
+  const sunriseDeg = o.sunriseBearingDeg != null ? +o.sunriseBearingDeg : sunriseBearing(o.date);
+  const sunsetDeg = o.sunsetBearingDeg != null ? +o.sunsetBearingDeg : 360 - sunriseBearing(o.date);
   const tCream = colorFrom(ctx, '--cream', '#f4e6d0');
 
   const top = tNightDeep.clone().lerp(new THREE.Color('#0f0a08'), 0.35);
   const mid = tNight.clone();
   const low = tNightWarm.clone();
   const haze = tHaze.clone().lerp(tNightWarm, 0.18);
-  const glow = tFire.clone().multiplyScalar(0.022);
 
   const group = new THREE.Group();
   group.name = 'sky';
@@ -333,20 +386,22 @@ export function createSky(ctx, opts = {}) {
   const disposables = [];
   const track = (x) => { disposables.push(x); return x; };
 
+  // Sky uniforms, shared (same objects) by every material that looks at the sky.
+  const skyUniforms = {
+    uTop: { value: top }, uMid: { value: mid }, uLow: { value: low }, uHaze: { value: haze },
+    uGlow: { value: tFire.clone().multiplyScalar(0.022) },
+    uVillage: { value: new THREE.Vector2(o.villageAz, 0.3) },
+    uFireAz: { value: fireAz },
+    uMoonCol: { value: tCream.clone().lerp(new THREE.Color('#ffe2b8'), 0.4).multiplyScalar(0.62) },
+    uMoonDir: { value: new THREE.Vector3(0, 1, 0) },
+    uMoonIllum: { value: 0 },
+    uDuskCol: { value: tFire.clone().lerp(tFireDeep, 0.5).multiplyScalar(0.03) },
+    uDawnCol: { value: new THREE.Color('#9aa8bf').multiplyScalar(0.022) },
+    uDusk: { value: new THREE.Vector2(bearingToAz(sunsetDeg), 0) },
+    uDawn: { value: new THREE.Vector2(bearingToAz(sunriseDeg), 0) },
+  };
+
   // ---------------------------------------------------------------- dome
-  const moonAz = -0.4, moonEl = 0.29;
-  const moonDir = new THREE.Vector3(Math.sin(moonAz) * Math.cos(moonEl), Math.sin(moonEl), -Math.cos(moonAz) * Math.cos(moonEl));
-  const moonRight = new THREE.Vector3(0, 1, 0).cross(moonDir).normalize().negate();
-  const moonUp = moonDir.clone().cross(moonRight).normalize().negate();
-  // tilt the crescent a little, as it is when low in the evening
-  const tilt = 0.5;
-  const mr = moonRight.clone().multiplyScalar(Math.cos(tilt)).addScaledVector(moonUp, Math.sin(tilt));
-  const mu = moonUp.clone().multiplyScalar(Math.cos(tilt)).addScaledVector(moonRight, -Math.sin(tilt));
-
-  const bandN = new THREE.Vector3(-0.4925, -0.495, -0.6825).normalize();
-  const bandA = new THREE.Vector3(0, 1, 0).cross(bandN).normalize();
-  const bandB = bandN.clone().cross(bandA).normalize();
-
   const domeMat = track(new THREE.ShaderMaterial({
     vertexShader: DOME_VERT,
     fragmentShader: DOME_FRAG,
@@ -354,18 +409,7 @@ export function createSky(ctx, opts = {}) {
     depthWrite: false,
     fog: false,
     toneMapped: false,
-    uniforms: {
-      uTop: { value: top }, uMid: { value: mid }, uLow: { value: low }, uHaze: { value: haze },
-      uGlow: { value: glow },
-      uMoonCol: { value: tCream.clone().lerp(new THREE.Color('#ffe2b8'), 0.4).multiplyScalar(0.62) },
-      uMilky: { value: tCream.clone().multiplyScalar(0.008) },
-      uMoonDir: { value: moonDir }, uMoonRight: { value: mr }, uMoonUp: { value: mu },
-      uBandN: { value: bandN }, uBandA: { value: bandA }, uBandB: { value: bandB },
-      uMoonOn: { value: o.moon ? 1 : 0 }, uMilkyOn: { value: o.milkyWay ? 1 : 0 },
-      uMoonSize: { value: 0.0145 },
-      uVillage: { value: new THREE.Vector2(0.95, 0.35) },
-      uFireAz: { value: fireAz },
-    },
+    uniforms: skyUniforms,
   }));
   const domeGeo = track(new THREE.SphereGeometry(o.radius, 48, 24));
   const dome = new THREE.Mesh(domeGeo, domeMat);
@@ -374,63 +418,10 @@ export function createSky(ctx, opts = {}) {
   dome.name = 'sky-dome';
   group.add(dome);
 
-  // --------------------------------------------------------------- stars
-  const starCount = Math.round(o.starCount * (reduced ? 0.6 : 1));
-  const sPos = new Float32Array(starCount * 3);
-  const sBright = new Float32Array(starCount);
-  const sPhase = new Float32Array(starCount);
-  const sCol = new Float32Array(starCount * 3);
-  const starR = o.radius * 0.94;
-  const warmWhite = new THREE.Color('#fff1dc');
-  const amber = new THREE.Color('#ffd7a0');
-  const paleBlue = new THREE.Color('#e4e8f0');
-  const tmpC = new THREE.Color();
-  for (let i = 0; i < starCount; i++) {
-    // pdf ∝ y: denser overhead, sparse near the horizon
-    const y = 0.03 + 0.97 * Math.pow(rng(), 0.62);
-    const phi = rng() * Math.PI * 2;
-    const rr = Math.sqrt(1 - y * y);
-    sPos[i * 3] = Math.cos(phi) * rr * starR;
-    sPos[i * 3 + 1] = y * starR;
-    sPos[i * 3 + 2] = Math.sin(phi) * rr * starR;
-    let b = 0.1 + 0.55 * Math.pow(rng(), 3.2);
-    if (i < 14) b = 0.72 + 0.28 * rng();          // a handful of brighter ones
-    sBright[i] = b;
-    sPhase[i] = rng();
-    const k = rng();
-    tmpC.copy(k < 0.12 ? amber : k > 0.9 ? paleBlue : warmWhite);
-    tmpC.multiplyScalar(0.9);
-    sCol[i * 3] = tmpC.r; sCol[i * 3 + 1] = tmpC.g; sCol[i * 3 + 2] = tmpC.b;
-  }
-  const starGeo = track(new THREE.BufferGeometry());
-  starGeo.setAttribute('position', new THREE.BufferAttribute(sPos, 3));
-  starGeo.setAttribute('aBright', new THREE.BufferAttribute(sBright, 1));
-  starGeo.setAttribute('aPhase', new THREE.BufferAttribute(sPhase, 1));
-  starGeo.setAttribute('aColor', new THREE.BufferAttribute(sCol, 3));
-  const starMat = track(new THREE.ShaderMaterial({
-    vertexShader: STAR_VERT,
-    fragmentShader: STAR_FRAG,
-    transparent: true,
-    depthWrite: false,
-    blending: THREE.AdditiveBlending,
-    fog: false,
-    toneMapped: false,
-    uniforms: {
-      uTime: { value: 0 },
-      uPx: { value: 1 },
-      uTwinkle: { value: reduced ? 0 : 1 },
-    },
-  }));
-  const stars = new THREE.Points(starGeo, starMat);
-  stars.renderOrder = -90;
-  stars.frustumCulled = false;
-  stars.name = 'sky-stars';
-  group.add(stars);
-
   // ---------------------------------------------------------------- land
   const pos = [];
-  const dep = [];
-  let curDepth = 0;
+  const kinds = [];
+  let kind = 0;              // 0 land silhouette, 1 lit window
   // place a 2D silhouette (local x along the arc tangent, y up) at angle th, distance R
   let bx = 0, bz = 0, tx = 0, tz = 0;
   const setBase = (th, R) => {
@@ -439,231 +430,289 @@ export function createSky(ctx, opts = {}) {
   };
   const tri = (x1, y1, x2, y2, x3, y3) => {
     pos.push(bx + tx * x1, y1, bz + tz * x1, bx + tx * x2, y2, bz + tz * x2, bx + tx * x3, y3, bz + tz * x3);
-    dep.push(curDepth, curDepth, curDepth);
+    kinds.push(kind, kind, kind);
   };
   const quad = (x1, y1, x2, y2, x3, y3, x4, y4) => { tri(x1, y1, x2, y2, x3, y3); tri(x1, y1, x3, y3, x4, y4); };
 
-  // Norway spruce: stacked, drooping, ragged tiers with a thin leader
-  function spruce(H) {
-    const W = H * (0.2 + 0.07 * rng());
-    const n = Math.floor(8 + Math.min(H, 16) * 0.45 + rng() * 3);
-    const lean = (rng() - 0.5) * 0.04 * H;
-    quad(-0.025 * H, -1, 0.025 * H, -1, 0.02 * H, H * 0.3, -0.02 * H, H * 0.3);
-    for (let i = 0; i < n; i++) {
-      const f = i / n;
-      const yb = H * (0.1 + 0.8 * f) + (rng() - 0.5) * H * 0.02;
-      const yt = yb + H * (0.12 + 0.07 * rng()) * (1 - 0.35 * f);
-      const w = W * Math.pow(1 - f, 0.9) * (0.7 + 0.5 * rng()) + 0.03 * H;
-      const cx = lean * f;
-      const wl = w * (0.75 + 0.5 * rng());
-      const wr = w * (0.75 + 0.5 * rng());
-      const notch = yb + (yt - yb) * (0.2 + 0.2 * rng());
-      tri(cx, yt, cx - wl, yb - H * 0.035 * rng(), cx, notch);
-      tri(cx, yt, cx, notch, cx + wr, yb - H * 0.035 * rng());
-      // an occasional stray branch tip breaking the outline
-      if (rng() < 0.35) {
-        const s = rng() < 0.5 ? -1 : 1;
-        const bw = (s < 0 ? wl : wr);
-        tri(cx + s * bw * 0.5, yb + (yt - yb) * 0.35, cx + s * bw * (1.12 + 0.25 * rng()), yb - H * 0.02, cx + s * bw * 0.55, yb + (yt - yb) * 0.05);
-      }
-    }
-    tri(lean - 0.018 * H, H * 0.86, lean + 0.018 * H, H * 0.86, lean * 1.05 + (rng() - 0.5) * 0.01 * H, H * (1 + 0.03 * rng()));
-  }
-
-  // Scots pine: tall bare trunk, a few flat, ragged crown clumps on top
-  function scotsPine(H) {
-    const W = H * (0.2 + 0.1 * rng());
-    const bend = (rng() - 0.5) * 0.08 * H;
-    const tw = 0.02 * H + 0.06;
-    const yTop = H * (0.62 + 0.08 * rng());
-    quad(-tw, -1, tw, -1, bend * 0.4 + tw * 0.8, yTop * 0.5, bend * 0.4 - tw * 0.8, yTop * 0.5);
-    quad(bend * 0.4 - tw * 0.8, yTop * 0.5, bend * 0.4 + tw * 0.8, yTop * 0.5, bend + tw * 0.55, yTop, bend - tw * 0.55, yTop);
-    // crown: a dense, irregular mass of overlapping tufts, slightly flat-topped,
-    // with one or two looser tufts hanging off the side
-    const crownCy = yTop + (H - yTop) * 0.55;
-    const crownCx = bend + (rng() - 0.5) * W * 0.25;
-    const clumps = 6 + Math.floor(rng() * 4);
-    for (let k = 0; k < clumps; k++) {
-      const loose = k >= clumps - 2 && rng() < 0.6;
-      const ang = rng() * Math.PI * 2;
-      const rad = loose ? 0.75 + 0.3 * rng() : Math.sqrt(rng()) * 0.6;
-      const cx = crownCx + Math.cos(ang) * rad * W * 0.62;
-      const cy = Math.min(H * 0.93, crownCy + Math.sin(ang) * rad * (H - yTop) * 0.38);
-      const rx = W * (loose ? 0.18 + 0.12 * rng() : 0.24 + 0.16 * rng());
-      const ry = rx * (0.55 + 0.25 * rng());
-      if (loose || rng() < 0.3) tri(bend, yTop - 0.04 * H, bend, yTop + 0.02 * H, cx, cy - ry * 0.3);
-      const seg = 16;
-      let px = 0, py = 0, fx = 0, fy = 0;
-      for (let s = 0; s <= seg; s++) {
-        const a = (s / seg) * Math.PI * 2;
-        const sa = Math.sin(a);
-        const jag = sa > -0.2 ? 0.62 + 0.55 * rng() : 0.9 + 0.15 * rng();
-        const x = cx + Math.cos(a) * rx * jag;
-        const y = cy + sa * ry * jag * (sa > 0 ? 1.0 : 0.65);
-        if (s > 0) tri(cx, cy, px, py, x, y); else { fx = x; fy = y; }
-        px = s === seg ? fx : x; py = s === seg ? fy : y;
-      }
-    }
-  }
-
-  // Columnar juniper, very Polish heath
-  function juniper(H) {
-    const W = H * (0.14 + 0.06 * rng());
-    const n = 6;
-    for (let i = 0; i < n; i++) {
-      const f = i / n;
-      const yb = H * f * 0.85 - 0.3;
-      const yt = H * (f + 0.32) * 0.85;
-      const w = W * (0.6 + 0.6 * Math.sin(Math.PI * (0.25 + 0.7 * f))) * (0.8 + 0.35 * rng());
-      tri(-w, yb, w * (0.8 + 0.3 * rng()), yb, (rng() - 0.5) * W * 0.4, Math.min(yt, H));
-    }
-  }
-
-  // ridgeline strip from y=-3 to profile(th) at distance R
-  function ridge(R, thMin, thMax, segs, profile) {
-    let prevTh = thMin, prevH = profile(thMin);
+  // a ridgeline strip from just below the ground up to profile(th), at distance R(th)
+  const SKIRT = -0.6;
+  function ridge(Rf, segs, profile) {
+    const R = typeof Rf === 'function' ? Rf : () => Rf;
+    let pTh = -SPAN, pH = profile(pTh), pR = R(pTh);
     for (let s = 1; s <= segs; s++) {
-      const th = thMin + (thMax - thMin) * (s / segs);
-      const h = profile(th);
-      const x0 = C.x + Math.sin(prevTh) * R, z0 = C.z - Math.cos(prevTh) * R;
-      const x1 = C.x + Math.sin(th) * R, z1 = C.z - Math.cos(th) * R;
-      pos.push(x0, -3, z0, x1, -3, z1, x1, h, z1, x0, -3, z0, x1, h, z1, x0, prevH, z0);
-      for (let k = 0; k < 6; k++) dep.push(curDepth);
-      prevTh = th; prevH = h;
+      const th = -SPAN + (2 * SPAN * s) / segs;
+      const h = profile(th), r = R(th);
+      const x0 = C.x + Math.sin(pTh) * pR, z0 = C.z - Math.cos(pTh) * pR;
+      const x1 = C.x + Math.sin(th) * r, z1 = C.z - Math.cos(th) * r;
+      if (h > SKIRT + 0.05 || pH > SKIRT + 0.05) {
+        pos.push(x0, SKIRT, z0, x1, SKIRT, z1, x1, h, z1, x0, SKIRT, z0, x1, h, z1, x0, pH, z0);
+        for (let k = 0; k < 6; k++) kinds.push(0);
+      }
+      pTh = th; pH = h; pR = r;
     }
   }
 
-  const SPAN = 1.95; // radians each side of straight ahead
-  const gap = (th) => 1 - o.gapDepth * Math.exp(-(th * th) / (o.gapWidth * o.gapWidth));
+  // a far forest canopy: a saw of narrow, uneven spires (single trees are not
+  // resolvable this far away), thinning out in patches of field and meadow
+  const spire = new Float32Array(4096);
+  for (let i = 0; i < spire.length; i++) spire[i] = rng();
+  function canopy(th, R, spacing, hMin, hMax, cover) {
+    if (cover <= 0) return 0;
+    const u = (th + SPAN) * R / spacing;
+    const k = Math.floor(u), f = u - k;
+    const r = spire[k & 4095];
+    const c = (f - 0.5 - (spire[(k + 7) & 4095] - 0.5) * 0.3) * 2;   // off-centre, narrow
+    const cone = Math.pow(Math.max(0, 1 - Math.abs(c)), 2.4);
+    return cover * (hMin + (hMax - hMin) * r) * (0.4 + 0.6 * cone);
+  }
+  // 1 inside the valley window, 0 outside, soft edges
+  const valley = (th) => 1 - smoothstep(o.valleyHalf - 0.1, o.valleyHalf + 0.06, Math.abs(th - o.valleyAz));
 
-  // far ridge: very faint, long and low
-  curDepth = 1.0;
-  ridge(o.ridgeDistance, -SPAN - 0.1, SPAN + 0.1, 700, (th) =>
-    3.2 + 5.5 * noise.fbm(th * 1.1 + 10, 4) - 1.2 + 0.18 * noise(th * 260));
-
-  // rolling hills with a fuzz of distant forest on top
-  curDepth = 0.78;
-  ridge(o.hillsDistance, -SPAN - 0.1, SPAN + 0.1, 1600, (th) => {
-    const base = 1.0 + 5.2 * Math.pow(noise.fbm(th * 1.7 + 3.3, 4), 1.4);
-    const forest = noise.fbm(th * 9 + 40, 2) > 0.48 ? 0.9 + 0.5 * Math.abs(noise(th * 420) - 0.5) * 2 : 0.15;
-    return base + forest * (0.5 + 0.35 * noise(th * 1300));
+  // Emitted near to far, so the depth test rejects hidden far fragments early.
+  // piecewise-linear noise: angular, rocky facets instead of rounded bumps
+  const plin = (x, salt) => {
+    const k = Math.floor(x), f = x - k;
+    const a = spire[(k * 7 + salt) & 4095], b = spire[((k + 1) * 7 + salt) & 4095];
+    return a + (b - a) * f;
+  };
+  // --- the low wooded rise right behind the tree row: terrain for trees.js to stand
+  // in front of. It sinks to nothing in the valley window so the lake shows.
+  ridge((th) => o.riseDistance + 6 * noise(th * 6 + 21), 1200, (th) => {
+    const keep = 1 - valley(th);
+    if (keep <= 0.001) return -0.05;
+    const base = 2.4 + 3.4 * noise.fbm(th * 3.4 + 11, 3);
+    return keep * (base + canopy(th, o.riseDistance, 0.7, 0.2, 0.9, 1) + 0.4 * (plin(th * 400, 13) - 0.5));
   });
 
-  // the treeline: a forest edge of spruce and Scots pine, dipping behind the fire
-  const TL = o.treelineDistance;
-  curDepth = 0.45;
-  // understory mass so no sky shows between trunks
-  ridge(TL + 3, -SPAN, SPAN, 900, (th) => (2.6 + 2.2 * noise.fbm(th * 6 + 70, 3) + 0.4 * noise(th * 600)) * gap(th));
-  for (let row = 0; row < 2; row++) {
-    const R0 = TL + (row === 0 ? 4.5 : 0);
-    let th = -SPAN;
-    while (th < SPAN) {
-      const dens = noise.fbm(th * 3.1 + 21 + row * 5, 3); // stands and thinner patches
-      const g = gap(th);
-      const stand = 0.65 + 0.7 * dens;
-      const H = o.treeHeight * (row === 0 ? 1 : 0.82) * stand * g * (0.75 + 0.5 * rng());
-      setBase(th, R0 + (rng() - 0.5) * 2.5);
-      if (H > 2.5) {
-        if (g > 0.85 && rng() < (row === 0 ? 0.3 : 0.15)) scotsPine(H * 1.05); else spruce(H);
-      }
-      const step = (0.9 + 1.6 * rng()) * (1.3 - 0.6 * dens) * (row === 0 ? 1 : 1.25);
-      th += step / R0;
+  // --- the village on the far shore: a wooden church with a steep shingled roof and an
+  // onion-domed tower, a few cottages with steep Podhale roofs, lime trees, three lit windows
+  const winPos = [new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()];
+  let winCount = 0;
+  const VR = o.villageDistance;
+  const at = (offset, dr = 0) => setBase(o.villageAz + offset / VR, VR + dr);
+  function windowAt(offset, dr, x, y) {
+    at(offset, dr - 0.4);           // just in front of the wall
+    kind = 1;
+    quad(x - 0.32, y, x + 0.32, y, x + 0.32, y + 0.62, x - 0.32, y + 0.62);
+    kind = 0;
+    if (winCount < 3) winPos[winCount++].set(bx + tx * x, o.horizonY + y + 0.31, bz + tz * x);
+  }
+  function cottage(offset, dr, w, gable, lit) {
+    at(offset, dr);
+    const wall = 2.3 + 0.4 * rng();
+    quad(-w / 2, -1, w / 2, -1, w / 2, wall, -w / 2, wall);
+    const ov = 0.5, rh = gable ? w * 0.75 : w * 0.55;
+    if (gable) tri(-w / 2 - ov, wall - 0.3, w / 2 + ov, wall - 0.3, 0, wall + rh);   // gable end facing us
+    else quad(-w / 2 - ov, wall - 0.3, w / 2 + ov, wall - 0.3, w * 0.28, wall + rh, -w * 0.3, wall + rh);
+    const cx = w * (0.15 + 0.15 * rng());
+    quad(cx - 0.25, wall + rh * 0.4, cx + 0.25, wall + rh * 0.4, cx + 0.25, wall + rh * 0.85, cx - 0.25, wall + rh * 0.85);
+    if (lit !== undefined) windowAt(offset, dr, lit * w, 1.0);
+  }
+  function church(offset, dr) {
+    at(offset, dr);
+    // nave with a steep shingled roof, a lower roof over the chancel
+    quad(-4, -1, 4.5, -1, 4.5, 3.4, -4, 3.4);
+    quad(-4.6, 3.1, 5.1, 3.1, 3.7, 8.4, -3.4, 8.4);
+    quad(4.5, -1, 7.5, -1, 7.5, 2.8, 4.5, 2.8);
+    quad(4.3, 2.6, 8.0, 2.6, 7.2, 6.0, 4.6, 6.6);
+    // tower with sloping walls, a skirt of shingles, then the onion dome and a cross
+    const x0 = -6.6, x1 = -3.6;
+    quad(x0, -1, x1, -1, x1 - 0.35, 10.2, x0 + 0.35, 10.2);
+    quad(x0 - 0.5, 9.2, x1 + 0.5, 9.2, x1 - 0.1, 10.6, x0 + 0.1, 10.6);
+    const cx = (x0 + x1) / 2, y0 = 10.5, hb = 3.2, wb = 1.55;
+    let pr = wb * 0.55, py = y0;
+    for (let s = 1; s <= 10; s++) {
+      const f = s / 10;
+      const r = f < 0.45 ? wb * (0.55 + 0.45 * Math.sin((f / 0.45) * Math.PI / 2)) : wb * Math.pow((1 - f) / 0.55, 1.5);
+      const y = y0 + hb * f;
+      quad(cx - pr, py, cx + pr, py, cx + Math.max(r, 0.05), y, cx - Math.max(r, 0.05), y);
+      pr = Math.max(r, 0.05); py = y;
+    }
+    quad(cx - 0.08, py, cx + 0.08, py, cx + 0.06, py + 1.6, cx - 0.06, py + 1.6);
+    quad(cx - 0.45, py + 1.05, cx + 0.45, py + 1.05, cx + 0.45, py + 1.22, cx - 0.45, py + 1.22);
+  }
+  function limeTree(offset, dr, H) {
+    at(offset, dr);
+    quad(-0.18, -1, 0.18, -1, 0.14, H * 0.45, -0.14, H * 0.45);
+    const cy = H * 0.62, rx = H * (0.32 + 0.08 * rng()), ry = H * 0.38, seg = 14;
+    let px = 0, py = 0;
+    for (let s = 0; s <= seg; s++) {
+      const a = (s / seg) * Math.PI * 2;
+      const j = s === seg ? 1 : 0.86 + 0.22 * rng();
+      const x = Math.cos(a) * rx * j, y = cy + Math.sin(a) * ry * j;
+      if (s > 0) tri(0, cy, px, py, x, y);
+      px = x; py = y;
     }
   }
+  limeTree(-27, 3, 6.5);
+  cottage(-19, 2, 7.5, false, 0.22);
+  cottage(-11, -1, 6.5, true);
+  limeTree(-6.5, 4, 8);
+  church(0, 0);
+  cottage(11, 1, 6, true, -0.12);
+  limeTree(17, 3, 7);
+  cottage(22, -2, 8, false);
+  cottage(30, 1, 6.5, true, 0.15);
+  limeTree(36, 2, 5.5);
 
-  // near layer: a few young pines, junipers and bushes, kept to the sides
-  curDepth = 0.0;
-  const ND = o.nearDistance;
-  let th = -SPAN;
-  while (th < SPAN) {
-    const side = Math.abs(th);
-    const clump = noise.fbm(th * 4 + 90, 2);
-    const allowed = side > 0.42 && clump > 0.42;
-    if (allowed) {
-      setBase(th, ND + (rng() - 0.5) * 5);
-      const k = rng();
-      if (k < 0.35) spruce(2.4 + 4.2 * rng() * (0.6 + side * 0.4));
-      else juniper(1.3 + 1.8 * rng());
-      th += (1.0 + 2.4 * rng()) / ND;
-    } else {
-      th += (2.5 + 3.0 * rng()) / ND;
-    }
-  }
+  // --- far forested hills, two ranges, with patches of field
+  ridge((th) => o.hillsDistance + 15 * noise(th * 5 + 3), 2600, (th) => {
+    const base = 3.5 + 9 * Math.pow(noise.fbm(th * 1.9 + 3.3, 4), 1.4);
+    const cover = smoothstep(0.36, 0.48, noise.fbm(th * 9 + 40, 2));
+    return base + canopy(th, o.hillsDistance, 1.2, 1.4, 3.4, cover);
+  });
+
+  ridge((th) => o.hills2Distance + 20 * noise(th * 4 + 9), 2600, (th) => {
+    const base = 8 + 12 * Math.pow(noise.fbm(th * 1.6 + 7.7, 4), 1.3);
+    const cover = smoothstep(0.38, 0.5, noise.fbm(th * 7 + 60, 2));
+    return base + canopy(th, o.hills2Distance, 1.6, 1.8, 4.0, cover);
+  });
+  // --- Giewont, the sleeping knight: a long body lying on its back, feet to the left,
+  // folded hands on the chest, the face turned to the sky with the summit as the brow,
+  // and the steep drop of the back of the head. Stands in front of the main range.
+  const knight = [
+    [0.00, 0.05], [0.05, 0.30], [0.09, 0.38], [0.13, 0.33], [0.22, 0.46], [0.30, 0.42],
+    [0.42, 0.56], [0.52, 0.58], [0.60, 0.50], [0.66, 0.63], [0.70, 0.59], [0.76, 0.85],
+    [0.79, 0.70], [0.83, 0.92], [0.87, 0.88], [0.92, 0.62], [0.97, 0.30], [1.00, 0.08],
+  ];
+  const gW = 0.5, gH = 46;
+  ridge(o.giewontDistance, 700, (th) => {
+    const u = (th - (o.giewontAz - gW / 2)) / gW;
+    if (u <= 0 || u >= 1) return -3;
+    let i = 1;
+    while (i < knight.length - 1 && knight[i][0] < u) i++;
+    const [u0, h0] = knight[i - 1], [u1, h1] = knight[i];
+    const f = (u - u0) / (u1 - u0);   // straight facets: rock, and a crisp profile
+    const h = h0 + (h1 - h0) * f;
+    return gH * h + 1.2 * (plin(th * 220, 5) - 0.5) + 0.5 * (plin(th * 700, 9) - 0.5);
+  });
+
+  // --- Tatras: a long, high wall of sharp granite peaks and saddles far away, tapering
+  // at both ends, with a lower saddle where Giewont stands in front
+  ridge((th) => o.tatraDistance + 12 * noise(th * 3 + 50), 1800, (th) => {
+    const u = (th + 0.95) / 2.15;
+    if (u <= 0 || u >= 1) return -3;
+    const env = Math.pow(Math.sin(Math.PI * u), 0.45);
+    const massif = 20 + 16 * noise.fbm(th * 2.2 + 30, 3);
+    // sharp summits: ridged, then pinched to points
+    const n = noise(th * 9 + 100);
+    const peaks = Math.pow(1 - Math.abs(2 * n - 1), 3.0) * 26;
+    const facets = (plin(th * 60, 3) - 0.5) * 5 + (plin(th * 190, 11) - 0.5) * 2.2;
+    const dg = (th - o.giewontAz - 0.03) / 0.26;
+    const saddle = 1 - 0.62 * Math.exp(-dg * dg * dg * dg);
+    return env * saddle * (massif + peaks + facets) - 3 * (1 - env);
+  });
 
   const landGeo = track(new THREE.BufferGeometry());
   landGeo.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
-  landGeo.setAttribute('aDepth', new THREE.Float32BufferAttribute(dep, 1));
+  landGeo.setAttribute('aKind', new THREE.Float32BufferAttribute(kinds, 1));
   landGeo.computeBoundingSphere();
 
-  const landNear = new THREE.Color('#0b0705');
-  const landMid = new THREE.Color('#130c08');
-  const landFar = haze.clone().lerp(low, 0.35).multiplyScalar(0.82);
+  // One set of world uniforms (same objects) for land, ground and lake: they must agree.
+  const worldUniforms = {
+    ...skyUniforms,
+    uGroundNear: { value: new THREE.Color('#0b0705') },
+    uDark: { value: new THREE.Color('#110b08') },
+    uWarm: { value: tFire.clone().multiplyScalar(0.016) },
+    uCool: { value: new THREE.Vector3(0.84, 0.94, 1.16) },   // far air: a touch greyer and bluer
+    uWinCol: { value: tFireCore.clone().multiplyScalar(0.55) },
+    uCenter: { value: new THREE.Vector2(C.x, C.z) },
+    uTime: { value: 0 },
+    uMistK: { value: o.mist ? 1 : 0 },
+  };
   const landMat = track(new THREE.ShaderMaterial({
-    vertexShader: LAND_VERT,
+    vertexShader: WORLD_VERT,
     fragmentShader: LAND_FRAG,
     side: THREE.DoubleSide,
     fog: false,
     toneMapped: false,
-    uniforms: {
-      uNear: { value: landNear }, uMid: { value: landMid }, uFar: { value: landFar },
-      uHaze: { value: haze.clone() },
-      uWarm: { value: tFire.clone().multiplyScalar(0.012) },
-      uWarmK: { value: 1 },
-      uFireAz: { value: fireAz },
-      uCenter: { value: new THREE.Vector2(C.x, C.z) },
-    },
+    uniforms: worldUniforms,
   }));
   const land = new THREE.Mesh(landGeo, landMat);
   land.name = 'sky-land';
   land.renderOrder = -50;
+  land.frustumCulled = false;
   group.add(land);
 
   // -------------------------------------------------------------- ground
-  const groundGeo = track(new THREE.CircleGeometry(o.radius - 1, 128));
+  // Drawn after the land and without depth writes: it still hides the land's buried
+  // skirts, and glow billboards reaching below y = 0 leave no hard line on it.
+  const groundGeo = track(new THREE.CircleGeometry(300, 160));
   groundGeo.rotateX(-Math.PI / 2);
   groundGeo.translate(C.x, 0, C.z);
+  groundGeo.setAttribute('aKind', new THREE.Float32BufferAttribute(new Float32Array(groundGeo.attributes.position.count), 1));
   const groundMat = track(new THREE.ShaderMaterial({
-    vertexShader: LAND_VERT.replace('attribute float aDepth;', 'float aDepth = 0.0;'),
+    vertexShader: WORLD_VERT,
     fragmentShader: GROUND_FRAG,
+    depthWrite: false,
     fog: false,
     toneMapped: false,
     uniforms: {
-      uNear: { value: new THREE.Color('#0a0604') },
-      uFar: { value: new THREE.Color('#150d09') },
-      uHaze: { value: haze.clone() },
-      uWarm: { value: tFire.clone() },
-      uPool: { value: 0.0045 },
-      uCenter: { value: new THREE.Vector2(C.x, C.z) },
+      ...worldUniforms,
+      uPool: { value: 0.0045 / 0.016 },
       uFire: { value: new THREE.Vector2(o.firePosition.x, o.firePosition.z) },
     },
   }));
   const ground = new THREE.Mesh(groundGeo, groundMat);
   ground.name = 'sky-ground';
-  ground.renderOrder = -60;
+  ground.renderOrder = -45;
+  ground.frustumCulled = false;
   group.add(ground);
+
+  // ---------------------------------------------------------------- lake
+  const lakeAz0 = o.valleyAz - o.valleyHalf - 0.12, lakeAz1 = o.valleyAz + o.valleyHalf + 0.12;
+  const lp = [];
+  {
+    const sa = 96, sr = 6, r0 = o.lakeNear - 1, r1 = o.lakeFar + 1;
+    const P = (a, r) => [C.x + Math.sin(a) * r, 0.03, C.z - Math.cos(a) * r];
+    for (let i = 0; i < sa; i++) {
+      for (let j = 0; j < sr; j++) {
+        const a0 = lakeAz0 + (lakeAz1 - lakeAz0) * (i / sa), a1 = lakeAz0 + (lakeAz1 - lakeAz0) * ((i + 1) / sa);
+        const q0 = r0 + (r1 - r0) * (j / sr), q1 = r0 + (r1 - r0) * ((j + 1) / sr);
+        lp.push(...P(a0, q0), ...P(a1, q0), ...P(a1, q1), ...P(a0, q0), ...P(a1, q1), ...P(a0, q1));
+      }
+    }
+  }
+  const lakeGeo = track(new THREE.BufferGeometry());
+  lakeGeo.setAttribute('position', new THREE.Float32BufferAttribute(lp, 3));
+  lakeGeo.setAttribute('aKind', new THREE.Float32BufferAttribute(new Float32Array(lp.length / 3), 1));
+  const lakeMat = track(new THREE.ShaderMaterial({
+    vertexShader: WORLD_VERT,
+    fragmentShader: LAKE_FRAG,
+    transparent: true,
+    depthWrite: false,
+    fog: false,
+    toneMapped: false,
+    uniforms: {
+      ...worldUniforms,
+      uLakeR: { value: new THREE.Vector2(o.lakeNear, o.lakeFar) },
+      uLakeAz: { value: new THREE.Vector2(lakeAz0, lakeAz1) },
+      uWin: { value: winPos },
+      uWaterY: { value: o.horizonY + 0.03 },
+    },
+  }));
+  const lake = new THREE.Mesh(lakeGeo, lakeMat);
+  lake.name = 'sky-lake';
+  lake.renderOrder = -44;
+  lake.frustumCulled = false;
+  group.add(lake);
 
   // ---------------------------------------------------------------- mist
   let mistMat = null;
   if (o.mist) {
-    const mp = [], ma = [], ml = [];
-    const band = (R, H, layer) => {
-      const segs = 160;
-      for (let s = 0; s < segs; s++) {
-        const a0 = -SPAN + (2 * SPAN * s) / segs, a1 = -SPAN + (2 * SPAN * (s + 1)) / segs;
-        const x0 = C.x + Math.sin(a0) * R, z0 = C.z - Math.cos(a0) * R;
-        const x1 = C.x + Math.sin(a1) * R, z1 = C.z - Math.cos(a1) * R;
-        const u0 = a0 * R, u1 = a1 * R;
-        mp.push(x0, -0.2, z0, x1, -0.2, z1, x1, H, z1, x0, -0.2, z0, x1, H, z1, x0, H, z0);
-        ma.push(u0, 0, u1, 0, u1, 1, u0, 0, u1, 1, u0, 1);
-        for (let k = 0; k < 6; k++) ml.push(layer);
-      }
-    };
-    band((o.nearDistance + o.treelineDistance) / 2 + 2, 3.4, 0);
-    band((o.treelineDistance + o.hillsDistance) / 2 + 2, 5.0, 1);
+    const mp = [], ma = [];
+    const R = o.hillsDistance - 18, H = 11, segs = 120;
+    for (let s = 0; s < segs; s++) {
+      const a0 = -SPAN + (2 * SPAN * s) / segs, a1 = -SPAN + (2 * SPAN * (s + 1)) / segs;
+      const x0 = C.x + Math.sin(a0) * R, z0 = C.z - Math.cos(a0) * R;
+      const x1 = C.x + Math.sin(a1) * R, z1 = C.z - Math.cos(a1) * R;
+      const u0 = a0 * R, u1 = a1 * R;
+      mp.push(x0, 0, z0, x1, 0, z1, x1, H, z1, x0, 0, z0, x1, H, z1, x0, H, z0);
+      ma.push(u0, 0, u1, 0, u1, 1, u0, 0, u1, 1, u0, 1);
+    }
     const mistGeo = track(new THREE.BufferGeometry());
     mistGeo.setAttribute('position', new THREE.Float32BufferAttribute(mp, 3));
     mistGeo.setAttribute('aMist', new THREE.Float32BufferAttribute(ma, 2));
-    mistGeo.setAttribute('aLayer', new THREE.Float32BufferAttribute(ml, 1));
     mistMat = track(new THREE.ShaderMaterial({
       vertexShader: MIST_VERT,
       fragmentShader: MIST_FRAG,
@@ -673,14 +722,15 @@ export function createSky(ctx, opts = {}) {
       fog: false,
       toneMapped: false,
       uniforms: {
-        uColor: { value: haze.clone().lerp(tFire, 0.06) },
+        uColor: { value: haze.clone().lerp(tFire, 0.05) },
         uTime: { value: 0 },
-        uOpacity: { value: 0.32 },
+        uOpacity: { value: 0.3 },
       },
     }));
     const mist = new THREE.Mesh(mistGeo, mistMat);
     mist.name = 'sky-mist';
     mist.renderOrder = -40;
+    mist.frustumCulled = false;
     group.add(mist);
   }
 
@@ -689,22 +739,43 @@ export function createSky(ctx, opts = {}) {
   const fogNear = 14;
   const fogFar = 72;
 
-  function resize(width, height) {
-    const pr = ctx.renderer && ctx.renderer.getPixelRatio ? ctx.renderer.getPixelRatio() : 1;
-    const h = height || (typeof window !== 'undefined' ? window.innerHeight : 1000);
-    starMat.uniforms.uPx.value = pr * Math.min(1.25, Math.max(0.75, h / 1000));
+  // Time of day: night is the look above; dusk and dawn are blended in, all in place.
+  const mistCol = mistMat ? mistMat.uniforms.uColor.value : null;
+  const base = { haze: haze.clone(), fog: fogColor.clone(), mist: mistCol ? mistCol.clone() : null };
+  const duskHaze = base.haze.clone().lerp(tFire, 0.03).multiplyScalar(1.08);
+  const dawnHaze = base.haze.clone().lerp(new THREE.Color('#5a5a62'), 0.12);
+  const duskFog = base.fog.clone().lerp(tFire, 0.02).multiplyScalar(1.06);
+  const dawnFog = base.fog.clone().lerp(new THREE.Color('#4a4c56'), 0.1);
+  const blend3 = (out, a, b, c, wa, wb, wc) =>
+    out.setRGB(a.r * wa + b.r * wb + c.r * wc, a.g * wa + b.g * wb + c.g * wc, a.b * wa + b.b * wb + c.b * wc);
+  function setTimeOfDay(tod) {
+    if (!tod) return;
+    let d = Math.max(0, +tod.dusk || 0), w = Math.max(0, +tod.dawn || 0), n = Math.max(0, +tod.night || 0);
+    const sum = d + w + n || 1; d /= sum; w /= sum; n /= sum;
+    skyUniforms.uDusk.value.y = d;
+    skyUniforms.uDawn.value.y = w;
+    blend3(haze, base.haze, duskHaze, dawnHaze, n, d, w);
+    blend3(fogColor, base.fog, duskFog, dawnFog, n, d, w);
+    if (mistCol) mistCol.copy(haze).lerp(tFire, 0.05);
   }
-  resize(typeof window !== 'undefined' ? window.innerWidth : 1920, typeof window !== 'undefined' ? window.innerHeight : 1000);
+
+  function resize(/* width, height */) { /* nothing depends on the viewport */ }
 
   function update(timeSec /* , dtSec */) {
-    // the sky sits at infinity: keep the dome and stars centred on the camera
+    // the sky sits at infinity: keep the dome centred on the camera
     const cp = ctx.camera.position;
     dome.position.set(cp.x, cp.y - o.horizonY, cp.z);
-    stars.position.copy(dome.position);
     if (!reduced) {
-      starMat.uniforms.uTime.value = timeSec;
+      worldUniforms.uTime.value = timeSec;
       if (mistMat) mistMat.uniforms.uTime.value = timeSec;
     }
+  }
+
+  // Faint moon-lit air around the moon. direction: unit THREE.Vector3 toward the moon,
+  // illumination 0..1 (0 = off, the default). Copies, never allocates.
+  function setMoon(direction, illumination) {
+    if (direction && direction.isVector3) skyUniforms.uMoonDir.value.copy(direction).normalize();
+    skyUniforms.uMoonIllum.value = Math.min(1, Math.max(0, +illumination || 0));
   }
 
   function dispose() {
@@ -713,7 +784,7 @@ export function createSky(ctx, opts = {}) {
     disposables.length = 0;
   }
 
-  return { group, update, resize, dispose, fogColor, fogNear, fogFar };
+  return { group, update, resize, dispose, setMoon, setTimeOfDay, fogColor, fogNear, fogFar, uniforms: skyUniforms };
 }
 
 export default createSky;

@@ -2,7 +2,10 @@
 <!--
   Iskry · dev/sky.html — standalone test bench for js/scene/sky.js.
   Serve the repo root (python3 -m http.server) and open /dev/sky.html.
-  URL params: ?rm=1 (reduced motion) &nomoon=1 &nomilky=1 &nomist=1 &labels=0 &seed=N
+  URL params: ?rm=1 (reduced motion) &nomist=1 &labels=0 &nofire=1 &seed=N
+  &tod=dusk|night|dawn  calls setTimeOfDay (or &dusk=0.5&dawn=0.5 weights)
+  &moon=0.8  feeds setMoon() a test direction (az -0.4, el 0.29) and that illumination
+  &gain=N  brightens the canvas N times (CSS filter on the 8-bit output) to inspect banding and seams
 -->
 <html lang="en">
 <head>
@@ -44,13 +47,14 @@
     renderer.outputColorSpace = THREE.SRGBColorSpace;
     renderer.toneMapping = THREE.NoToneMapping;
     document.getElementById('gl').appendChild(renderer.domElement);
+    if (q.has('gain')) renderer.domElement.style.filter = `brightness(${+q.get('gain') || 6})`;
 
     const cssR = new CSS3DRenderer();
     cssR.setSize(innerWidth, innerHeight);
     document.getElementById('css').appendChild(cssR.domElement);
 
     const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 200);
+    const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.1, 400);
     camera.position.set(0, 1.6, 12);
     camera.lookAt(0, 4.1, -10);
 
@@ -63,10 +67,15 @@
     };
     const ctx = { scene, camera, renderer, reducedMotion: q.get('rm') === '1', readToken };
     const sky = createSky(ctx, {
-      moon: q.get('nomoon') !== '1', milkyWay: q.get('nomilky') !== '1', mist: q.get('nomist') !== '1',
+      mist: q.get('nomist') !== '1',
       seed: q.has('seed') ? +q.get('seed') : undefined,
     });
     window.sky = sky;
+    if (q.has('tod') || q.has('dusk') || q.has('dawn')) {
+      const t = q.get('tod'), d = t ? +(t === 'dusk') : +(q.get('dusk') || 0), w = t ? +(t === 'dawn') : +(q.get('dawn') || 0);
+      sky.setTimeOfDay({ hour: 0, dusk: d, dawn: w, night: Math.max(0, 1 - d - w) });
+    }
+    if (q.has('moon')) sky.setMoon(new THREE.Vector3(Math.sin(-0.4) * Math.cos(0.29), Math.sin(0.29), -Math.cos(-0.4) * Math.cos(0.29)), +q.get('moon'));
     scene.fog = new THREE.Fog(sky.fogColor, sky.fogNear, sky.fogFar);
 
     // placeholder fire: a soft additive sprite at the core's fire position
@@ -76,7 +85,7 @@
     g.fillStyle = rg; g.fillRect(0, 0, 128, 128);
     const fireTex = new THREE.CanvasTexture(c); fireTex.colorSpace = THREE.SRGBColorSpace;
     const fire = new THREE.Sprite(new THREE.SpriteMaterial({ map: fireTex, blending: THREE.AdditiveBlending, depthWrite: false, depthTest: false, fog: false }));
-    fire.position.set(-3, 0.7, -2); fire.scale.set(2.6, 2.6, 1); scene.add(fire);
+    fire.position.set(-3, 0.7, -2); fire.scale.set(2.6, 2.6, 1); if (q.get('nofire') !== '1') scene.add(fire);
 
     // placeholder strings (fogged WebGL lines) climbing as they recede
     const lineMat = new THREE.LineBasicMaterial({ color: 0xf4e6d0, transparent: true, opacity: 0.22, fog: true });
@@ -122,6 +131,7 @@
     };
 
     const clock = new THREE.Clock();
+    window.__renderOnce = () => renderer.render(scene, camera);   // for GPU timer probes
     renderer.setAnimationLoop(() => {
       const t = clock.getElapsedTime(), dt = clock.getDelta();
       sky.update(t, dt);
