@@ -85,6 +85,7 @@ const TUNE = {
   firePos: [FIRE.x, FIRE.y, FIRE.z],           // left of centre, so the embers blow across the middle (layout.js)
   fireScale: 1.3,              // a hearth, not a candle
   treeSeed: 7,                 // the same forest every visit
+  moonSpot: [17, 22],          // deg right, deg up: clear of the top string and the right-hand birches
   heatLift: 0.14,              // m, how far the warm air above the fire lifts a word
   heatWidth: 2.6,              // m, half-width of the warm column (gaussian)
   heatDepth: 7,                // m, how far in front of or behind the fire it is felt
@@ -323,7 +324,8 @@ function moduleTable() {
     ["stars", "createStars", () => ({ date, latitudeDeg: PLACE.latitudeDeg, longitudeDeg: PLACE.longitudeDeg })],
     ["moon", "createMoon", () => ({
       date, latitudeDeg: PLACE.latitudeDeg, longitudeDeg: PLACE.longitudeDeg,
-      facingAzDeg: modules.stars && Number.isFinite(modules.stars.facingAzDeg) ? modules.stars.facingAzDeg : 120
+      facingAzDeg: modules.stars && Number.isFinite(modules.stars.facingAzDeg) ? modules.stars.facingAzDeg : 120,
+      azimuthDeg: TUNE.moonSpot[0], altitudeDeg: TUNE.moonSpot[1]   // the artistic spot, when the real moon is out of frame
     })],
     ["trees", "createTrees", () => ({ firePosition: v(TUNE.firePos), wind, seed: TUNE.treeSeed })],
     // The near world. Placement comes from layout.js; only the shared fire and wind are passed.
