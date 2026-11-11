@@ -1,0 +1,799 @@
+{
+ "label": "profiler-baseline",
+ "date": "2026-11-11T04:15:18.162Z",
+ "gitHead": "698243b",
+ "settleSec": 5,
+ "durationSec": 15,
+ "runs": [
+  {
+   "page": "profiler",
+   "url": "http://localhost:8791/dev/perf.html?auto=1&",
+   "otherLocalhostTabs": 4,
+   "otherLocalhostUrls": [
+    "http://localhost:8782/dev/road.html?cam=real",
+    "http://localhost:8770/?debug=1&hour=22",
+    "http://localhost:8782/dev/road.html?cam=real",
+    "http://localhost:8775/"
+   ],
+   "otherPages": 6,
+   "profiler": {
+    "done": true,
+    "error": null,
+    "phase": "done in 72 s. Results: window.__perf",
+    "params": {
+     "reps": 30,
+     "rounds": 5,
+     "dpr": 2,
+     "aa": true,
+     "marginal": true,
+     "fill": true,
+     "live": true,
+     "auto": true,
+     "reducedMotion": false,
+     "only": [],
+     "skip": [],
+     "width": 1800,
+     "height": 1021
+    },
+    "env": {
+     "gpu": "ANGLE (Apple, ANGLE Metal Renderer: Apple M5 Pro, Unspecified Version)",
+     "timerQuery": true,
+     "parallelCompile": true,
+     "samples": 4,
+     "drawingBuffer": [
+      3600,
+      2042
+     ],
+     "devicePixelRatio": 2,
+     "window": [
+      1800,
+      1021
+     ],
+     "three": "186",
+     "userAgent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/157.0.0.0 Safari/537.36"
+    },
+    "warnings": [],
+    "modules": {
+     "sky": {
+      "name": "sky",
+      "importMs": 8.4,
+      "createMs": 44.3,
+      "firstRenderMs": 1028.5,
+      "secondRenderMs": 48.6,
+      "programs": 5,
+      "links": 5,
+      "geometries": 5,
+      "textures": 0,
+      "texMB": 0,
+      "geoMB": 0.88,
+      "loadUploadMB": 0.88,
+      "objects": 5,
+      "hasSetTimeOfDay": true,
+      "hasSetQuality": false,
+      "update": {
+       "mean": 0,
+       "max": 0.1
+      },
+      "uploads": {
+       "callsPerFrame": 0,
+       "kbPerFrame": 0,
+       "linksPerFrame": 0,
+       "detail": {}
+      },
+      "alone": {
+       "wallMin": 0,
+       "wallMed": 0.23,
+       "submit": 0.02,
+       "calls": 6,
+       "triangles": 66889,
+       "points": 0,
+       "lines": 0,
+       "gpuMin": 1.66,
+       "gpuMed": 2.67,
+       "ms": 1.66,
+       "msMed": 2.67
+      },
+      "marginal": 2.25,
+      "marginalRange": [
+       -3.03,
+       8.46
+      ]
+     },
+     "stars": {
+      "name": "stars",
+      "importMs": 7.2,
+      "createMs": 295.2,
+      "firstRenderMs": 345.4,
+      "secondRenderMs": 26.4,
+      "programs": 2,
+      "links": 3,
+      "geometries": 2,
+      "textures": 1,
+      "texMB": 4,
+      "geoMB": 3.82,
+      "loadUploadMB": 7.82,
+      "objects": 2,
+      "hasSetTimeOfDay": true,
+      "hasSetQuality": false,
+      "update": {
+       "mean": 0.001,
+       "max": 0.1
+      },
+      "uploads": {
+       "callsPerFrame": 0,
+       "kbPerFrame": 0,
+       "linksPerFrame": 0,
+       "detail": {}
+      },
+      "alone": {
+       "wallMin": 0,
+       "wallMed": 0.32,
+       "submit": 0.01,
+       "calls": 3,
+       "triangles": 55480,
+       "points": 105598,
+       "lines": 0,
+       "gpuMin": 0.53,
+       "gpuMed": 1.35,
+       "ms": 0.53,
+       "msMed": 1.35
+      },
+      "marginal": 1.73,
+      "marginalRange": [
+       0.04,
+       5.86
+      ]
+     },
+     "moon": {
+      "name": "moon",
+      "importMs": 6.5,
+      "createMs": 463.4,
+      "firstRenderMs": 347.5,
+      "secondRenderMs": 50.4,
+      "programs": 2,
+      "links": 4,
+      "geometries": 2,
+      "textures": 2,
+      "texMB": 12,
+      "geoMB": 0.26,
+      "loadUploadMB": 12.26,
+      "objects": 2,
+      "hasSetTimeOfDay": true,
+      "hasSetQuality": false,
+      "update": {
+       "mean": 0.001,
+       "max": 0.1
+      },
+      "uploads": {
+       "callsPerFrame": 0,
+       "kbPerFrame": 0,
+       "linksPerFrame": 0,
+       "detail": {}
+      },
+      "alone": {
+       "wallMin": 0,
+       "wallMed": 0,
+       "submit": 0.01,
+       "calls": 3,
+       "triangles": 58554,
+       "points": 0,
+       "lines": 0,
+       "gpuMin": 0.23,
+       "gpuMed": 0.35,
+       "ms": 0.23,
+       "msMed": 0.35
+      },
+      "marginal": 1.84,
+      "marginalRange": [
+       -0.69,
+       5.83
+      ]
+     },
+     "trees": {
+      "name": "trees",
+      "importMs": 2.9,
+      "createMs": 163.1,
+      "firstRenderMs": 214.4,
+      "secondRenderMs": 15.7,
+      "programs": 2,
+      "links": 2,
+      "geometries": 15,
+      "textures": 1,
+      "texMB": 5.33,
+      "geoMB": 7.85,
+      "loadUploadMB": 11.85,
+      "objects": 15,
+      "hasSetTimeOfDay": false,
+      "hasSetQuality": false,
+      "update": {
+       "mean": 0,
+       "max": 0
+      },
+      "uploads": {
+       "callsPerFrame": 0,
+       "kbPerFrame": 0,
+       "linksPerFrame": 0,
+       "detail": {}
+      },
+      "alone": {
+       "wallMin": 0,
+       "wallMed": 0,
+       "submit": 0.03,
+       "calls": 31,
+       "triangles": 464164,
+       "points": 0,
+       "lines": 0,
+       "gpuMin": 1.19,
+       "gpuMed": 1.34,
+       "ms": 1.19,
+       "msMed": 1.34
+      },
+      "marginal": 1.93,
+      "marginalRange": [
+       0.92,
+       4.1
+      ]
+     },
+     "ground": {
+      "name": "ground",
+      "importMs": 8.4,
+      "createMs": 91.4,
+      "firstRenderMs": 96,
+      "secondRenderMs": 18.1,
+      "programs": 1,
+      "links": 1,
+      "geometries": 1,
+      "textures": 1,
+      "texMB": 0,
+      "geoMB": 1.07,
+      "loadUploadMB": 0.43,
+      "objects": 2,
+      "hasSetTimeOfDay": true,
+      "hasSetQuality": false,
+      "update": {
+       "mean": 0,
+       "max": 0
+      },
+      "uploads": {
+       "callsPerFrame": 0,
+       "kbPerFrame": 0,
+       "linksPerFrame": 0,
+       "detail": {}
+      },
+      "alone": {
+       "wallMin": 0,
+       "wallMed": 0,
+       "submit": 0.01,
+       "calls": 3,
+       "triangles": 87592,
+       "points": 0,
+       "lines": 0,
+       "gpuMin": 0.98,
+       "gpuMed": 1.68,
+       "ms": 0.98,
+       "msMed": 1.68
+      },
+      "marginal": 1.26,
+      "marginalRange": [
+       0.73,
+       2.64
+      ]
+     },
+     "road": {
+      "name": "road",
+      "importMs": 8.3,
+      "createMs": 72.8,
+      "firstRenderMs": 95.9,
+      "secondRenderMs": 19,
+      "programs": 1,
+      "links": 1,
+      "geometries": 1,
+      "textures": 2,
+      "texMB": 4.07,
+      "geoMB": 0.48,
+      "loadUploadMB": 3.54,
+      "objects": 1,
+      "hasSetTimeOfDay": true,
+      "hasSetQuality": false,
+      "update": {
+       "mean": 0,
+       "max": 0
+      },
+      "uploads": {
+       "callsPerFrame": 0,
+       "kbPerFrame": 0,
+       "linksPerFrame": 0,
+       "detail": {}
+      },
+      "alone": {
+       "wallMin": 0,
+       "wallMed": 0,
+       "submit": 0.01,
+       "calls": 2,
+       "triangles": 64180,
+       "points": 0,
+       "lines": 0,
+       "gpuMin": 0.52,
+       "gpuMed": 1.15,
+       "ms": 0.52,
+       "msMed": 1.15
+      },
+      "marginal": 3.33,
+      "marginalRange": [
+       -1.92,
+       6.1
+      ]
+     },
+     "grass": {
+      "name": "grass",
+      "importMs": 7.5,
+      "createMs": 60.7,
+      "firstRenderMs": 166.6,
+      "secondRenderMs": 21.6,
+      "programs": 2,
+      "links": 2,
+      "geometries": 6,
+      "textures": 0,
+      "texMB": 0,
+      "geoMB": 7.09,
+      "loadUploadMB": 7.09,
+      "objects": 6,
+      "hasSetTimeOfDay": true,
+      "hasSetQuality": false,
+      "update": {
+       "mean": 0,
+       "max": 0
+      },
+      "uploads": {
+       "callsPerFrame": 0,
+       "kbPerFrame": 0,
+       "linksPerFrame": 0,
+       "detail": {}
+      },
+      "alone": {
+       "wallMin": 0,
+       "wallMed": 0,
+       "submit": 0.03,
+       "calls": 7,
+       "triangles": 318373,
+       "points": 0,
+       "lines": 0,
+       "gpuMin": 1.38,
+       "gpuMed": 1.57,
+       "ms": 1.38,
+       "msMed": 1.57
+      },
+      "marginal": -4.03,
+      "marginalRange": [
+       -5.31,
+       0.98
+      ]
+     },
+     "fence": {
+      "name": "fence",
+      "importMs": 8.2,
+      "createMs": 29.3,
+      "firstRenderMs": 261.6,
+      "secondRenderMs": 20.1,
+      "programs": 3,
+      "links": 3,
+      "geometries": 2,
+      "textures": 0,
+      "texMB": 0,
+      "geoMB": 1.12,
+      "loadUploadMB": 1.12,
+      "objects": 2,
+      "hasSetTimeOfDay": true,
+      "hasSetQuality": false,
+      "update": {
+       "mean": 0,
+       "max": 0.1
+      },
+      "uploads": {
+       "callsPerFrame": 0,
+       "kbPerFrame": 0,
+       "linksPerFrame": 0,
+       "detail": {}
+      },
+      "alone": {
+       "wallMin": 0,
+       "wallMed": 0.4,
+       "submit": 0.02,
+       "calls": 4,
+       "triangles": 62927,
+       "points": 0,
+       "lines": 0,
+       "gpuMin": 0.53,
+       "gpuMed": 0.74,
+       "ms": 0.53,
+       "msMed": 0.74
+      },
+      "marginal": -0.79,
+      "marginalRange": [
+       -3.19,
+       4.56
+      ]
+     },
+     "log": {
+      "name": "log",
+      "importMs": 7.7,
+      "createMs": 54.7,
+      "firstRenderMs": 19,
+      "secondRenderMs": 19.1,
+      "programs": 0,
+      "links": 0,
+      "geometries": 0,
+      "textures": 0,
+      "texMB": 0,
+      "geoMB": 1.34,
+      "loadUploadMB": 0,
+      "objects": 3,
+      "hasSetTimeOfDay": true,
+      "hasSetQuality": false,
+      "update": {
+       "mean": 0.001,
+       "max": 0.1
+      },
+      "uploads": {
+       "callsPerFrame": 0,
+       "kbPerFrame": 0,
+       "linksPerFrame": 0,
+       "detail": {}
+      },
+      "alone": {
+       "wallMin": 0,
+       "wallMed": 0,
+       "submit": 0.01,
+       "calls": 4,
+       "triangles": 83384,
+       "points": 0,
+       "lines": 0,
+       "gpuMin": 0.17,
+       "gpuMed": 0.28,
+       "ms": 0.17,
+       "msMed": 0.28
+      },
+      "marginal": 0.44,
+      "marginalRange": [
+       -1.43,
+       2.62
+      ]
+     },
+     "foreground": {
+      "name": "foreground",
+      "importMs": 11.8,
+      "createMs": 19.6,
+      "firstRenderMs": 249.3,
+      "secondRenderMs": 18.8,
+      "programs": 3,
+      "links": 3,
+      "geometries": 3,
+      "textures": 2,
+      "texMB": 0.02,
+      "geoMB": 0.75,
+      "loadUploadMB": 0.75,
+      "objects": 5,
+      "hasSetTimeOfDay": false,
+      "hasSetQuality": false,
+      "update": {
+       "mean": 0.003,
+       "max": 0.1
+      },
+      "uploads": {
+       "callsPerFrame": 1,
+       "kbPerFrame": 2.25,
+       "linksPerFrame": 0,
+       "detail": {
+        "texSubImage2D": {
+         "callsPerFrame": 1,
+         "kbPerFrame": 2.25
+        }
+       }
+      },
+      "alone": {
+       "wallMin": 0,
+       "wallMed": 0,
+       "submit": 0.02,
+       "calls": 6,
+       "triangles": 50085,
+       "points": 0,
+       "lines": 0,
+       "gpuMin": 1.72,
+       "gpuMed": 2.37,
+       "ms": 1.72,
+       "msMed": 2.37
+      },
+      "marginal": 4.67,
+      "marginalRange": [
+       3.52,
+       8.81
+      ]
+     },
+     "strings": {
+      "name": "strings",
+      "importMs": 19.9,
+      "createMs": 19.6,
+      "firstRenderMs": 181,
+      "secondRenderMs": 16.6,
+      "programs": 2,
+      "links": 2,
+      "geometries": 2,
+      "textures": 1,
+      "texMB": 1.5,
+      "geoMB": 0.07,
+      "loadUploadMB": 2.75,
+      "objects": 1,
+      "hasSetTimeOfDay": false,
+      "hasSetQuality": false,
+      "update": {
+       "mean": 0.001,
+       "max": 0.1
+      },
+      "uploads": {
+       "callsPerFrame": 0,
+       "kbPerFrame": 0,
+       "linksPerFrame": 0,
+       "detail": {}
+      },
+      "alone": {
+       "wallMin": 0,
+       "wallMed": 0,
+       "submit": 0.01,
+       "calls": 2,
+       "triangles": 49096,
+       "points": 0,
+       "lines": 0,
+       "gpuMin": 0.27,
+       "gpuMed": 0.44,
+       "ms": 0.27,
+       "msMed": 0.44
+      },
+      "marginal": 0.92,
+      "marginalRange": [
+       -2.95,
+       4.44
+      ]
+     },
+     "fire": {
+      "name": "fire",
+      "importMs": 7,
+      "createMs": 22.5,
+      "firstRenderMs": 503.7,
+      "secondRenderMs": 21.9,
+      "programs": 6,
+      "links": 6,
+      "geometries": 5,
+      "textures": 1,
+      "texMB": 0.06,
+      "geoMB": 0.15,
+      "loadUploadMB": 0.21,
+      "objects": 5,
+      "hasSetTimeOfDay": false,
+      "hasSetQuality": false,
+      "update": {
+       "mean": 0.001,
+       "max": 0.1
+      },
+      "uploads": {
+       "callsPerFrame": 0,
+       "kbPerFrame": 0,
+       "linksPerFrame": 0,
+       "detail": {}
+      },
+      "alone": {
+       "wallMin": 0,
+       "wallMed": 0,
+       "submit": 0.02,
+       "calls": 6,
+       "triangles": 50772,
+       "points": 140,
+       "lines": 0,
+       "gpuMin": 1.08,
+       "gpuMed": 1.73,
+       "ms": 1.08,
+       "msMed": 1.73
+      },
+      "marginal": 2.24,
+      "marginalRange": [
+       -2.92,
+       7.03
+      ]
+     }
+    },
+    "total": {
+     "wallMin": 0.02,
+     "wallMed": 0.51,
+     "submit": 0.13,
+     "calls": 65,
+     "triangles": 863520,
+     "points": 105738,
+     "lines": 0,
+     "gpuMin": 9.12,
+     "gpuMed": 10.81,
+     "ms": 9.12,
+     "msMed": 10.97,
+     "samples": [
+      9.12,
+      11.13,
+      10.34
+     ]
+    },
+    "sweep": [
+     {
+      "pixelRatio": 2,
+      "ms": 11.67,
+      "msMed": 11.71
+     },
+     {
+      "pixelRatio": 1.5,
+      "ms": 6.76,
+      "msMed": 8.54
+     },
+     {
+      "pixelRatio": 1.25,
+      "ms": 6.4,
+      "msMed": 6.04
+     },
+     {
+      "pixelRatio": 1,
+      "ms": 4.89,
+      "msMed": 5.44
+     }
+    ],
+    "tick": {
+     "steadyFrameMs": 45.5,
+     "ticks": [
+      {
+       "hour": 1.28,
+       "cpuMs": 0.4,
+       "nextFrameMs": 40.8,
+       "extraMs": 0,
+       "links": 0,
+       "uploadCalls": 1,
+       "uploadKB": 2.25
+      },
+      {
+       "hour": 1.29,
+       "cpuMs": 0.4,
+       "nextFrameMs": 49.7,
+       "extraMs": 4.2,
+       "links": 0,
+       "uploadCalls": 1,
+       "uploadKB": 2.25
+      },
+      {
+       "hour": 17.5,
+       "cpuMs": 0.3,
+       "nextFrameMs": 58.6,
+       "extraMs": 13.1,
+       "links": 0,
+       "uploadCalls": 1,
+       "uploadKB": 2.25
+      },
+      {
+       "hour": 19,
+       "cpuMs": 0.3,
+       "nextFrameMs": 50.1,
+       "extraMs": 4.6,
+       "links": 0,
+       "uploadCalls": 1,
+       "uploadKB": 2.25
+      },
+      {
+       "hour": 22,
+       "cpuMs": 0.2,
+       "nextFrameMs": 39.1,
+       "extraMs": 0,
+       "links": 0,
+       "uploadCalls": 1,
+       "uploadKB": 2.25
+      },
+      {
+       "hour": 5.5,
+       "cpuMs": 0.2,
+       "nextFrameMs": 29.7,
+       "extraMs": 0,
+       "links": 0,
+       "uploadCalls": 1,
+       "uploadKB": 2.25
+      },
+      {
+       "hour": 6.75,
+       "cpuMs": 0.5,
+       "nextFrameMs": 52.7,
+       "extraMs": 7.2,
+       "links": 0,
+       "uploadCalls": 1,
+       "uploadKB": 2.25
+      },
+      {
+       "hour": 1.27,
+       "cpuMs": 0.3,
+       "nextFrameMs": 46.9,
+       "extraMs": 1.4,
+       "links": 0,
+       "uploadCalls": 1,
+       "uploadKB": 2.25
+      }
+     ],
+     "perModule": {
+      "sky": {
+       "calls": 8,
+       "cpuMs": 0.03,
+       "maxMs": 0.1
+      },
+      "stars": {
+       "calls": 8,
+       "cpuMs": 0.21,
+       "maxMs": 0.3
+      },
+      "moon": {
+       "calls": 8,
+       "cpuMs": 0.05,
+       "maxMs": 0.1
+      },
+      "ground": {
+       "calls": 8,
+       "cpuMs": 0,
+       "maxMs": 0
+      },
+      "road": {
+       "calls": 8,
+       "cpuMs": 0,
+       "maxMs": 0
+      },
+      "grass": {
+       "calls": 8,
+       "cpuMs": 0,
+       "maxMs": 0
+      },
+      "fence": {
+       "calls": 8,
+       "cpuMs": 0.01,
+       "maxMs": 0.1
+      },
+      "log": {
+       "calls": 8,
+       "cpuMs": 0.03,
+       "maxMs": 0.1
+      }
+     },
+     "worstExtraMs": 13.4,
+     "links": 0
+    },
+    "lateLights": {
+     "links": 13,
+     "ms": 2132.3,
+     "fireOwnLinks": 6
+    },
+    "dispose": {
+     "geometries": 1,
+     "textures": 1,
+     "programs": 0,
+     "leftInScene": [],
+     "clean": false
+    },
+    "load": {
+     "createMs": 1336.6,
+     "firstRenderMs": 3508.9,
+     "programs": 42
+    },
+    "empty": {
+     "wallMin": 1.28,
+     "wallMed": 1.46,
+     "submit": 0.02,
+     "calls": 1,
+     "triangles": 46456,
+     "points": 0,
+     "lines": 0,
+     "gpuMin": 0.33,
+     "gpuMed": 0.77,
+     "ms": 0.33,
+     "msMed": 0.77
+    }
+   },
+   "errors": [],
+   "repeat": 0
+  }
+ ]
+}

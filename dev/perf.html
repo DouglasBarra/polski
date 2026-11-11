@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<!--
+  Iskry · dev/perf.html — the whole-scene profiler (OWNER: perf agent; logic in dev/perf.js).
+  Serve the repo root (python3 -m http.server) and open /dev/perf.html. It builds the same stage as
+  js/scene.js, loads every environment module with the same factory and options, and measures each
+  one alone, the full set, and the full set without each one. Results: the table here and window.__perf.
+
+  URL params
+    ?only=sky,fire  ?skip=grass,trees   which modules to load
+    ?dpr=2          WebGL pixel ratio (default: min(devicePixelRatio, 2), as the core)
+    ?size=1800x1021 canvas size in CSS px (default: the window); the canvas may be larger than the window
+    ?reps=30        renders inside one GPU timer query        ?rounds=5  timer queries per measurement
+    ?marginal=0     skip the "full set without X" pass        ?fill=0    skip the pixel-ratio sweep of the total
+    ?aa=0           no MSAA (the core uses antialias: true)   ?hour=5.5  pin the clock (as the core)
+    ?rm=1           reducedMotion: true for the modules       ?live=0    no live view afterwards
+    ?quick=1        load and measure the whole scene only (a few seconds)
+    ?auto=1         for tools/perf/run.mjs: also runs the dispose check at the end (ends the live view)
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iskry · frame budget</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="../css/tokens.css">
+  <style>
+    html, body { margin: 0; height: 100%; background: #120c09; overflow: hidden; }
+    #scene-world { position: fixed; inset: 0; overflow: hidden; }
+    #scene-world canvas { display: block; }
+    #panel {
+      position: fixed; left: 12px; top: 12px; max-width: calc(100vw - 24px); max-height: calc(100vh - 24px);
+      overflow: auto; box-sizing: border-box; padding: 12px 14px; border-radius: 8px;
+      background: rgba(14, 10, 8, 0.86); color: #e9d9c4; font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, monospace;
+    }
+    #panel h1 { font: 600 13px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; margin: 0 0 4px; color: #ffcf8a; }
+    #panel p { margin: 2px 0 8px; color: #b9a48c; max-width: 118ch; }
+    #panel table { border-collapse: collapse; margin: 6px 0 10px; }
+    #panel th, #panel td { padding: 2px 9px 2px 0; text-align: right; white-space: nowrap; font-variant-numeric: tabular-nums; }
+    #panel th { color: #b9a48c; font-weight: 400; border-bottom: 1px solid #4a3a2c; }
+    #panel th:first-child, #panel td:first-child { text-align: left; }
+    #panel tr.total td { border-top: 1px solid #4a3a2c; color: #ffcf8a; }
+    #panel .hot { color: #ff9d6b; }
+    #panel .warn { color: #ffb86b; }
+    #panel button { font: inherit; color: inherit; background: #2a1d14; border: 1px solid #5a4634; border-radius: 4px; padding: 2px 8px; cursor: pointer; }
+    #panel label { margin-right: 10px; white-space: nowrap; }
+  </style>
+  <script type="importmap">
+    { "imports": {
+        "three": "../vendor/three/three.module.js",
+        "three/addons/": "../vendor/three/addons/"
+    } }
+  </script>
+</head>
+<body>
+  <div id="scene-world" aria-hidden="true"></div>
+  <div id="panel"><h1>Iskry · frame budget</h1><p id="status">starting…</p><div id="out"></div></div>
+  <script type="module" src="./perf.js"></script>
+</body>
+</html>

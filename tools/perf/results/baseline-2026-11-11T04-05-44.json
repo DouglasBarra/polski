@@ -1,0 +1,1054 @@
+{
+ "label": "baseline",
+ "date": "2026-11-11T04:05:44.410Z",
+ "gitHead": "ff41c61",
+ "settleSec": 5,
+ "durationSec": 15,
+ "runs": [
+  {
+   "page": "site",
+   "url": "http://localhost:8791/",
+   "otherLocalhostTabs": 4,
+   "otherLocalhostUrls": [
+    "http://localhost:8770/?debug=1&hour=22",
+    "http://localhost:8782/dev/road.html?cam=real",
+    "http://localhost:8793/",
+    "http://localhost:8775/"
+   ],
+   "otherPages": 8,
+   "viewport": {
+    "w": 1800,
+    "h": 1021,
+    "dpr": 2,
+    "canvas": [
+     3600,
+     2042
+    ],
+    "visible": "visible"
+   },
+   "quality": null,
+   "load": {
+    "firstFrameMs": 167.4,
+    "domContentLoadedMs": 208.7,
+    "programsLinked": 34,
+    "lastLinkMs": 2200.1,
+    "sceneCompleteMs": 2369.3,
+    "worstHitchMs": 320.7,
+    "framesOver33": 55,
+    "framesOver50": 34,
+    "hitches": [
+     {
+      "t": 0.47,
+      "ms": 174.9,
+      "frames": 1
+     },
+     {
+      "t": 0.8,
+      "ms": 320.7,
+      "frames": 1
+     },
+     {
+      "t": 0.96,
+      "ms": 158.8,
+      "frames": 1
+     },
+     {
+      "t": 1.23,
+      "ms": 270.9,
+      "frames": 1
+     },
+     {
+      "t": 1.33,
+      "ms": 100,
+      "frames": 1
+     },
+     {
+      "t": 1.52,
+      "ms": 186.7,
+      "frames": 1
+     },
+     {
+      "t": 1.74,
+      "ms": 184.2,
+      "frames": 1
+     },
+     {
+      "t": 1.86,
+      "ms": 122.1,
+      "frames": 1
+     },
+     {
+      "t": 2.37,
+      "ms": 184.8,
+      "frames": 1
+     },
+     {
+      "t": 4.01,
+      "ms": 109,
+      "frames": 1
+     },
+     {
+      "t": 4.16,
+      "ms": 99.8,
+      "frames": 1
+     },
+     {
+      "t": 4.31,
+      "ms": 108.6,
+      "frames": 1
+     }
+    ],
+    "longtasks": [
+     [
+      135.1,
+      75
+     ],
+     [
+      310.8,
+      164
+     ],
+     [
+      528.1,
+      111
+     ],
+     [
+      640,
+      161
+     ],
+     [
+      801.8,
+      52
+     ],
+     [
+      854.7,
+      78
+     ],
+     [
+      972.4,
+      50
+     ],
+     [
+      1022.8,
+      103
+     ],
+     [
+      1125.9,
+      111
+     ],
+     [
+      1335,
+      92
+     ],
+     [
+      1427.7,
+      96
+     ],
+     [
+      1556.7,
+      104
+     ],
+     [
+      1661.4,
+      87
+     ],
+     [
+      1766.1,
+      105
+     ],
+     [
+      2185.6,
+      189
+     ]
+    ],
+    "gl": {
+     "texImage2D": {
+      "calls": 10,
+      "bytes": 10485788
+     },
+     "texImage3D": {
+      "calls": 2,
+      "bytes": 8
+     },
+     "bufferData": {
+      "calls": 254,
+      "bytes": 27714230
+     },
+     "compileShader": {
+      "calls": 68,
+      "bytes": 0
+     },
+     "linkProgram": {
+      "calls": 34,
+      "bytes": 0
+     },
+     "texStorage2D": {
+      "calls": 11,
+      "bytes": 11944512
+     },
+     "texSubImage2D": {
+      "calls": 84,
+      "bytes": 12098048
+     },
+     "generateMipmap": {
+      "calls": 13,
+      "bytes": 0
+     }
+    }
+   },
+   "steady": {
+    "frames": 230,
+    "seconds": 15,
+    "fps": 15.4,
+    "p50": 54.9,
+    "p90": 120.1,
+    "p95": 145.5,
+    "p99": 196.1,
+    "max": 229.4,
+    "over16_7": 217,
+    "over20": 213,
+    "over33": 190,
+    "spikes": [
+     {
+      "t": 5.64,
+      "ms": 161.3,
+      "frames": 1
+     },
+     {
+      "t": 5.9,
+      "ms": 116.6,
+      "frames": 1
+     },
+     {
+      "t": 6.32,
+      "ms": 141.4,
+      "frames": 1
+     },
+     {
+      "t": 8.7,
+      "ms": 112.5,
+      "frames": 1
+     },
+     {
+      "t": 8.9,
+      "ms": 130.8,
+      "frames": 1
+     },
+     {
+      "t": 9.2,
+      "ms": 135.7,
+      "frames": 1
+     },
+     {
+      "t": 9.32,
+      "ms": 117.5,
+      "frames": 1
+     },
+     {
+      "t": 9.51,
+      "ms": 114.4,
+      "frames": 1
+     },
+     {
+      "t": 9.78,
+      "ms": 137.7,
+      "frames": 1
+     },
+     {
+      "t": 10.03,
+      "ms": 197,
+      "frames": 1
+     },
+     {
+      "t": 10.25,
+      "ms": 150.7,
+      "frames": 1
+     },
+     {
+      "t": 10.46,
+      "ms": 160.3,
+      "frames": 1
+     },
+     {
+      "t": 10.67,
+      "ms": 124.5,
+      "frames": 1
+     },
+     {
+      "t": 11.08,
+      "ms": 209.7,
+      "frames": 1
+     },
+     {
+      "t": 11.25,
+      "ms": 115,
+      "frames": 1
+     },
+     {
+      "t": 11.6,
+      "ms": 148.7,
+      "frames": 1
+     },
+     {
+      "t": 11.87,
+      "ms": 229.4,
+      "frames": 1
+     },
+     {
+      "t": 12.04,
+      "ms": 130.8,
+      "frames": 1
+     },
+     {
+      "t": 12.41,
+      "ms": 136.7,
+      "frames": 1
+     },
+     {
+      "t": 12.59,
+      "ms": 144.6,
+      "frames": 1
+     },
+     {
+      "t": 12.79,
+      "ms": 149.4,
+      "frames": 1
+     },
+     {
+      "t": 13.44,
+      "ms": 112.4,
+      "frames": 1
+     },
+     {
+      "t": 13.59,
+      "ms": 124.5,
+      "frames": 1
+     },
+     {
+      "t": 13.77,
+      "ms": 112.6,
+      "frames": 1
+     },
+     {
+      "t": 14.4,
+      "ms": 174.9,
+      "frames": 1
+     },
+     {
+      "t": 14.59,
+      "ms": 114.1,
+      "frames": 1
+     },
+     {
+      "t": 14.94,
+      "ms": 118.8,
+      "frames": 1
+     },
+     {
+      "t": 15.14,
+      "ms": 145.5,
+      "frames": 1
+     },
+     {
+      "t": 15.31,
+      "ms": 153.5,
+      "frames": 1
+     },
+     {
+      "t": 15.52,
+      "ms": 193.9,
+      "frames": 1
+     },
+     {
+      "t": 15.68,
+      "ms": 120,
+      "frames": 1
+     },
+     {
+      "t": 17.99,
+      "ms": 120.9,
+      "frames": 1
+     },
+     {
+      "t": 18.67,
+      "ms": 145.4,
+      "frames": 1
+     }
+    ],
+    "spikeCount": 33,
+    "period": {
+     "meanSec": 0.41,
+     "jitter": 1.27,
+     "regular": false
+    },
+    "longtasks": [],
+    "gl": {
+     "texSubImage2D": {
+      "calls": 230,
+      "bytes": 529920
+     }
+    },
+    "heap": {
+     "mb": 33.6,
+     "minMb": 24.4,
+     "maxMb": 37,
+     "gcDrops": 1,
+     "growthKbPerSec": 1246.3
+    },
+    "hiddenMs": 0
+   },
+   "errors": [],
+   "screenshot": "/private/tmp/iskry-perf/baseline-site.png",
+   "alloc": {
+    "kbPerSec": 2.5,
+    "top": [
+     {
+      "kbPerSec": 1,
+      "where": "getObjectCSSMatrix /vendor/three/addons/renderers/CSS3DRenderer.js:324",
+      "via": "renderObject /vendor/three/addons/renderers/CSS3DRenderer.js:362 < renderObject /vendor/three/addons/renderers/CSS3DRenderer.js:362"
+     },
+     {
+      "kbPerSec": 0.5,
+      "where": "renderObject /vendor/three/addons/renderers/CSS3DRenderer.js:362",
+      "via": "CSS3DRenderer.render /vendor/three/addons/renderers/CSS3DRenderer.js:218 < renderObject /vendor/three/addons/renderers/CSS3DRenderer.js:362"
+     },
+     {
+      "kbPerSec": 0.5,
+      "where": "push :0",
+      "via": "CSS3DObject /vendor/three/addons/renderers/CSS3DRenderer.js:27 < addEventListener /vendor/three/three.core.js:2204"
+     },
+     {
+      "kbPerSec": 0.5,
+      "where": "gl.<computed> :37",
+      "via": "updateTexture /vendor/three/three.module.js:11815 < texSubImage2D /vendor/three/three.module.js:10659"
+     }
+    ]
+   },
+   "cpu": {
+    "seconds": 6.1,
+    "byFile": [
+     {
+      "pct": 98.1,
+      "ms": 5980.2,
+      "where": "((idle))"
+     },
+     {
+      "pct": 1,
+      "ms": 60.1,
+      "where": "((program))"
+     },
+     {
+      "pct": 0.4,
+      "ms": 25.3,
+      "where": "/vendor/three/three.module.js"
+     },
+     {
+      "pct": 0.1,
+      "ms": 8.1,
+      "where": "/vendor/three/three.core.js"
+     },
+     {
+      "pct": 0.1,
+      "ms": 5.8,
+      "where": "/vendor/three/addons/renderers/CSS3DRenderer.js"
+     },
+     {
+      "pct": 0.1,
+      "ms": 3.6,
+      "where": "/js/scene.js"
+     },
+     {
+      "pct": 0,
+      "ms": 2.3,
+      "where": "(tick)"
+     },
+     {
+      "pct": 0,
+      "ms": 1.9,
+      "where": "/js/scene/foreground.js"
+     },
+     {
+      "pct": 0,
+      "ms": 1.3,
+      "where": "(clear)"
+     },
+     {
+      "pct": 0,
+      "ms": 1,
+      "where": "/js/scene/strings.js"
+     },
+     {
+      "pct": 0,
+      "ms": 0.6,
+      "where": "(texSubImage2D)"
+     },
+     {
+      "pct": 0,
+      "ms": 0.6,
+      "where": "(uniformMatrix4fv)"
+     },
+     {
+      "pct": 0,
+      "ms": 0.6,
+      "where": "(useProgram)"
+     },
+     {
+      "pct": 0,
+      "ms": 0.3,
+      "where": "(activeTexture)"
+     },
+     {
+      "pct": 0,
+      "ms": 0.3,
+      "where": "(uniform2f)"
+     },
+     {
+      "pct": 0,
+      "ms": 0.3,
+      "where": "(note)"
+     }
+    ],
+    "byFunction": [
+     {
+      "pct": 98.1,
+      "ms": 5980.2,
+      "where": "(idle) ((idle)):0"
+     },
+     {
+      "pct": 1,
+      "ms": 60.1,
+      "where": "(program) ((program)):0"
+     },
+     {
+      "pct": 0.1,
+      "ms": 4.2,
+      "where": "setProgram /vendor/three/three.module.js:18407"
+     },
+     {
+      "pct": 0,
+      "ms": 2.9,
+      "where": "renderObject /vendor/three/addons/renderers/CSS3DRenderer.js:362"
+     },
+     {
+      "pct": 0,
+      "ms": 2.3,
+      "where": "shadeWord /js/scene.js:708"
+     },
+     {
+      "pct": 0,
+      "ms": 2.3,
+      "where": "tick (tick):12"
+     },
+     {
+      "pct": 0,
+      "ms": 1.9,
+      "where": "setValueV3f /vendor/three/three.module.js:5159"
+     },
+     {
+      "pct": 0,
+      "ms": 1.6,
+      "where": "getProgram /vendor/three/three.module.js:18224"
+     },
+     {
+      "pct": 0,
+      "ms": 1.6,
+      "where": "updateMatrixWorld /vendor/three/three.core.js:13067"
+     },
+     {
+      "pct": 0,
+      "ms": 1.3,
+      "where": "WebGLRenderer.renderBufferDirect /vendor/three/three.module.js:17233"
+     },
+     {
+      "pct": 0,
+      "ms": 1.3,
+      "where": "setup /vendor/three/three.module.js:1623"
+     },
+     {
+      "pct": 0,
+      "ms": 1.3,
+      "where": "setValue /vendor/three/three.module.js:6107"
+     },
+     {
+      "pct": 0,
+      "ms": 1.3,
+      "where": "clear (clear):0"
+     },
+     {
+      "pct": 0,
+      "ms": 1.3,
+      "where": "update /vendor/three/three.module.js:4612"
+     },
+     {
+      "pct": 0,
+      "ms": 1.3,
+      "where": "CSS3DRenderer.render /vendor/three/addons/renderers/CSS3DRenderer.js:218"
+     },
+     {
+      "pct": 0,
+      "ms": 1.3,
+      "where": "getObjectCSSMatrix /vendor/three/addons/renderers/CSS3DRenderer.js:324"
+     },
+     {
+      "pct": 0,
+      "ms": 1,
+      "where": "frame /js/scene.js:1016"
+     },
+     {
+      "pct": 0,
+      "ms": 1,
+      "where": "convert /vendor/three/three.core.js:6722"
+     },
+     {
+      "pct": 0,
+      "ms": 0.6,
+      "where": "upload /vendor/three/three.module.js:6123"
+     },
+     {
+      "pct": 0,
+      "ms": 0.6,
+      "where": "setValueV1f /vendor/three/three.module.js:5118"
+     },
+     {
+      "pct": 0,
+      "ms": 0.6,
+      "where": "flatten /vendor/three/three.module.js:5029"
+     },
+     {
+      "pct": 0,
+      "ms": 0.6,
+      "where": "texSubImage2D (texSubImage2D):0"
+     },
+     {
+      "pct": 0,
+      "ms": 0.6,
+      "where": "setTextureParameters /vendor/three/three.module.js:11682"
+     },
+     {
+      "pct": 0,
+      "ms": 0.6,
+      "where": "uniformMatrix4fv (uniformMatrix4fv):0"
+     },
+     {
+      "pct": 0,
+      "ms": 0.6,
+      "where": "getParameters /vendor/three/three.module.js:7357"
+     }
+    ]
+   },
+   "repeat": 0
+  },
+  {
+   "page": "bare",
+   "url": "http://localhost:8791/?bare=1",
+   "otherLocalhostTabs": 5,
+   "otherLocalhostUrls": [
+    "http://localhost:8770/?debug=1&hour=22",
+    "http://localhost:8793/",
+    "http://localhost:8782/dev/road.html?cam=real",
+    "http://localhost:8782/dev/road.html?cam=real",
+    "http://localhost:8775/"
+   ],
+   "otherPages": 7,
+   "viewport": {
+    "w": 1800,
+    "h": 1021,
+    "dpr": 2,
+    "canvas": [
+     3600,
+     2042
+    ],
+    "visible": "visible"
+   },
+   "quality": null,
+   "load": {
+    "firstFrameMs": 221.9,
+    "domContentLoadedMs": 3381.7,
+    "programsLinked": 0,
+    "lastLinkMs": 0,
+    "sceneCompleteMs": 221.9,
+    "worstHitchMs": 3163.2,
+    "framesOver33": 20,
+    "framesOver50": 18,
+    "hitches": [
+     {
+      "t": 3.39,
+      "ms": 3163.2,
+      "frames": 1
+     },
+     {
+      "t": 3.59,
+      "ms": 203.8,
+      "frames": 1
+     }
+    ],
+    "longtasks": [
+     [
+      175.7,
+      3206
+     ]
+    ],
+    "gl": {
+     "texImage2D": {
+      "calls": 7,
+      "bytes": 28
+     },
+     "texImage3D": {
+      "calls": 2,
+      "bytes": 8
+     }
+    }
+   },
+   "steady": {
+    "frames": 207,
+    "seconds": 15,
+    "fps": 13.8,
+    "p50": 64.9,
+    "p90": 129.4,
+    "p95": 158.2,
+    "p99": 184.2,
+    "max": 241.5,
+    "over16_7": 200,
+    "over20": 199,
+    "over33": 187,
+    "spikes": [
+     {
+      "t": 9.85,
+      "ms": 241.5,
+      "frames": 1
+     },
+     {
+      "t": 10.3,
+      "ms": 160.6,
+      "frames": 1
+     },
+     {
+      "t": 11.1,
+      "ms": 146.6,
+      "frames": 1
+     },
+     {
+      "t": 11.32,
+      "ms": 187.9,
+      "frames": 1
+     },
+     {
+      "t": 13.05,
+      "ms": 150.9,
+      "frames": 1
+     },
+     {
+      "t": 13.25,
+      "ms": 158.2,
+      "frames": 1
+     },
+     {
+      "t": 13.62,
+      "ms": 154.8,
+      "frames": 1
+     },
+     {
+      "t": 13.94,
+      "ms": 137.1,
+      "frames": 1
+     },
+     {
+      "t": 14.36,
+      "ms": 178.2,
+      "frames": 1
+     },
+     {
+      "t": 14.93,
+      "ms": 180.1,
+      "frames": 1
+     },
+     {
+      "t": 15.11,
+      "ms": 138.7,
+      "frames": 1
+     },
+     {
+      "t": 15.36,
+      "ms": 147.2,
+      "frames": 1
+     },
+     {
+      "t": 15.58,
+      "ms": 177.8,
+      "frames": 1
+     },
+     {
+      "t": 16.01,
+      "ms": 174.5,
+      "frames": 1
+     },
+     {
+      "t": 16.67,
+      "ms": 158.2,
+      "frames": 1
+     },
+     {
+      "t": 17.94,
+      "ms": 184.5,
+      "frames": 1
+     },
+     {
+      "t": 18.39,
+      "ms": 130.9,
+      "frames": 1
+     },
+     {
+      "t": 18.98,
+      "ms": 171.8,
+      "frames": 1
+     },
+     {
+      "t": 19.22,
+      "ms": 137.9,
+      "frames": 1
+     },
+     {
+      "t": 19.41,
+      "ms": 159.3,
+      "frames": 1
+     },
+     {
+      "t": 19.95,
+      "ms": 142.6,
+      "frames": 1
+     }
+    ],
+    "spikeCount": 21,
+    "period": {
+     "meanSec": 0.5,
+     "jitter": 0.76,
+     "regular": false
+    },
+    "longtasks": [],
+    "gl": {},
+    "heap": {
+     "mb": 9.2,
+     "minMb": 8.8,
+     "maxMb": 10.6,
+     "gcDrops": 6,
+     "growthKbPerSec": 378.6
+    },
+    "hiddenMs": 0
+   },
+   "errors": [],
+   "screenshot": "/private/tmp/iskry-perf/baseline-bare.png",
+   "alloc": {
+    "kbPerSec": 3.5,
+    "top": [
+     {
+      "kbPerSec": 1.54,
+      "where": "tick :12",
+      "via": "(root) :0"
+     },
+     {
+      "kbPerSec": 1,
+      "where": "getObjectCSSMatrix /vendor/three/addons/renderers/CSS3DRenderer.js:324",
+      "via": "renderObject /vendor/three/addons/renderers/CSS3DRenderer.js:362 < renderObject /vendor/three/addons/renderers/CSS3DRenderer.js:362"
+     },
+     {
+      "kbPerSec": 0.5,
+      "where": "getCameraCSSMatrix /vendor/three/addons/renderers/CSS3DRenderer.js:299",
+      "via": "frame /js/scene.js:1016 < CSS3DRenderer.render /vendor/three/addons/renderers/CSS3DRenderer.js:218"
+     },
+     {
+      "kbPerSec": 0.5,
+      "where": "push :0",
+      "via": "CSS3DObject /vendor/three/addons/renderers/CSS3DRenderer.js:27 < addEventListener /vendor/three/three.core.js:2204"
+     }
+    ]
+   },
+   "cpu": {
+    "seconds": 6.1,
+    "byFile": [
+     {
+      "pct": 97.2,
+      "ms": 5895.5,
+      "where": "((idle))"
+     },
+     {
+      "pct": 2.2,
+      "ms": 131.9,
+      "where": "((program))"
+     },
+     {
+      "pct": 0.3,
+      "ms": 16.5,
+      "where": "/vendor/three/addons/renderers/CSS3DRenderer.js"
+     },
+     {
+      "pct": 0.1,
+      "ms": 7.8,
+      "where": "/js/scene.js"
+     },
+     {
+      "pct": 0.1,
+      "ms": 6.1,
+      "where": "((garbage collector))"
+     },
+     {
+      "pct": 0.1,
+      "ms": 3.6,
+      "where": "/vendor/three/three.module.js"
+     },
+     {
+      "pct": 0,
+      "ms": 2.6,
+      "where": "/vendor/three/three.core.js"
+     },
+     {
+      "pct": 0,
+      "ms": 1.3,
+      "where": "(requestAnimationFrame)"
+     },
+     {
+      "pct": 0,
+      "ms": 1.3,
+      "where": "(tick)"
+     },
+     {
+      "pct": 0,
+      "ms": 1,
+      "where": "(clear)"
+     },
+     {
+      "pct": 0,
+      "ms": 0.3,
+      "where": "chrome-extension://ddkjiahejlhfcafbddmgiahcphecmpfh/js/scripting/css-generic.js"
+     }
+    ],
+    "byFunction": [
+     {
+      "pct": 97.2,
+      "ms": 5895.5,
+      "where": "(idle) ((idle)):0"
+     },
+     {
+      "pct": 2.2,
+      "ms": 131.9,
+      "where": "(program) ((program)):0"
+     },
+     {
+      "pct": 0.2,
+      "ms": 12.3,
+      "where": "renderObject /vendor/three/addons/renderers/CSS3DRenderer.js:362"
+     },
+     {
+      "pct": 0.1,
+      "ms": 6.1,
+      "where": "(garbage collector) ((garbage collector)):0"
+     },
+     {
+      "pct": 0.1,
+      "ms": 3.2,
+      "where": "shadeWord /js/scene.js:708"
+     },
+     {
+      "pct": 0,
+      "ms": 2.6,
+      "where": "getObjectCSSMatrix /vendor/three/addons/renderers/CSS3DRenderer.js:324"
+     },
+     {
+      "pct": 0,
+      "ms": 1.6,
+      "where": "CSS3DRenderer.render /vendor/three/addons/renderers/CSS3DRenderer.js:218"
+     },
+     {
+      "pct": 0,
+      "ms": 1.3,
+      "where": "frame /js/scene.js:1016"
+     },
+     {
+      "pct": 0,
+      "ms": 1.3,
+      "where": "requestAnimationFrame (requestAnimationFrame):0"
+     },
+     {
+      "pct": 0,
+      "ms": 1.3,
+      "where": "heat /js/scene.js:590"
+     },
+     {
+      "pct": 0,
+      "ms": 1.3,
+      "where": "tick (tick):12"
+     },
+     {
+      "pct": 0,
+      "ms": 1,
+      "where": "WebGLRenderer.render /vendor/three/three.module.js:17674"
+     },
+     {
+      "pct": 0,
+      "ms": 1,
+      "where": "clear (clear):0"
+     },
+     {
+      "pct": 0,
+      "ms": 0.6,
+      "where": "multiplyMatrices /vendor/three/three.core.js:10570"
+     },
+     {
+      "pct": 0,
+      "ms": 0.6,
+      "where": "setTest /vendor/three/three.module.js:9765"
+     },
+     {
+      "pct": 0,
+      "ms": 0.6,
+      "where": "updateMatrixWorld /vendor/three/three.core.js:13067"
+     },
+     {
+      "pct": 0,
+      "ms": 0.6,
+      "where": "moveWord /js/scene.js:650"
+     },
+     {
+      "pct": 0,
+      "ms": 0.6,
+      "where": "occlude /js/scene.js:681"
+     },
+     {
+      "pct": 0,
+      "ms": 0.3,
+      "where": "finish /vendor/three/three.module.js:8221"
+     },
+     {
+      "pct": 0,
+      "ms": 0.3,
+      "where": "workingToColorSpace /vendor/three/three.core.js:6757"
+     },
+     {
+      "pct": 0,
+      "ms": 0.3,
+      "where": "getRGB /vendor/three/three.core.js:14686"
+     },
+     {
+      "pct": 0,
+      "ms": 0.3,
+      "where": "setClear /vendor/three/three.module.js:9690"
+     },
+     {
+      "pct": 0,
+      "ms": 0.3,
+      "where": "init /vendor/three/three.module.js:8956"
+     },
+     {
+      "pct": 0,
+      "ms": 0.3,
+      "where": "setComponents /vendor/three/three.core.js:20745"
+     },
+     {
+      "pct": 0,
+      "ms": 0.3,
+      "where": "invert /vendor/three/three.core.js:10743"
+     }
+    ]
+   },
+   "repeat": 0
+  }
+ ]
+}

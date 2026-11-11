@@ -1,0 +1,687 @@
+{
+ "label": "baseline",
+ "date": "2026-11-11T04:03:19.125Z",
+ "gitHead": "ed29315",
+ "settleSec": 5,
+ "durationSec": 15,
+ "runs": [
+  {
+   "page": "site",
+   "url": "http://localhost:8791/",
+   "otherLocalhostTabs": 5,
+   "otherLocalhostUrls": [
+    "http://localhost:8782/dev/road.html?cam=real",
+    "http://localhost:8793/",
+    "http://localhost:8770/",
+    "http://localhost:8784/dev/log.html?cam=scene",
+    "http://localhost:8775/"
+   ],
+   "otherPages": 6,
+   "viewport": {
+    "w": 1800,
+    "h": 1021,
+    "dpr": 2,
+    "canvas": [
+     3600,
+     2042
+    ],
+    "visible": "hidden"
+   },
+   "quality": null,
+   "load": {
+    "firstFrameMs": 40.4,
+    "domContentLoadedMs": 90.3,
+    "programsLinked": 40,
+    "lastLinkMs": 971.9,
+    "sceneCompleteMs": 1040.4,
+    "worstHitchMs": 225,
+    "framesOver33": 10,
+    "framesOver50": 5,
+    "hitches": [
+     {
+      "t": 0.16,
+      "ms": 33.3,
+      "frames": 1
+     },
+     {
+      "t": 0.32,
+      "ms": 150.8,
+      "frames": 1
+     },
+     {
+      "t": 0.47,
+      "ms": 158.4,
+      "frames": 1
+     },
+     {
+      "t": 0.61,
+      "ms": 133.3,
+      "frames": 1
+     },
+     {
+      "t": 0.65,
+      "ms": 41.6,
+      "frames": 1
+     },
+     {
+      "t": 0.69,
+      "ms": 33.3,
+      "frames": 1
+     },
+     {
+      "t": 0.74,
+      "ms": 33.3,
+      "frames": 1
+     },
+     {
+      "t": 0.79,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 1.04,
+      "ms": 225,
+      "frames": 1
+     },
+     {
+      "t": 1.47,
+      "ms": 25.3,
+      "frames": 1
+     },
+     {
+      "t": 1.58,
+      "ms": 25.4,
+      "frames": 1
+     },
+     {
+      "t": 2.03,
+      "ms": 25.1,
+      "frames": 1
+     },
+     {
+      "t": 2.08,
+      "ms": 34.3,
+      "frames": 1
+     },
+     {
+      "t": 2.22,
+      "ms": 25.2,
+      "frames": 1
+     },
+     {
+      "t": 2.33,
+      "ms": 24.9,
+      "frames": 1
+     },
+     {
+      "t": 2.61,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 2.66,
+      "ms": 24.9,
+      "frames": 1
+     },
+     {
+      "t": 2.77,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 2.85,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 3.06,
+      "ms": 54,
+      "frames": 1
+     }
+    ],
+    "longtasks": [
+     [
+      162,
+      51
+     ],
+     [
+      213.1,
+      80
+     ],
+     [
+      318.8,
+      90
+     ],
+     [
+      536,
+      74
+     ],
+     [
+      831.1,
+      209
+     ]
+    ],
+    "gl": {
+     "texImage2D": {
+      "calls": 10,
+      "bytes": 10485788
+     },
+     "texImage3D": {
+      "calls": 2,
+      "bytes": 8
+     },
+     "bufferData": {
+      "calls": 254,
+      "bytes": 27714230
+     },
+     "compileShader": {
+      "calls": 80,
+      "bytes": 0
+     },
+     "linkProgram": {
+      "calls": 40,
+      "bytes": 0
+     },
+     "texStorage2D": {
+      "calls": 11,
+      "bytes": 11944512
+     },
+     "texSubImage2D": {
+      "calls": 209,
+      "bytes": 12386048
+     },
+     "generateMipmap": {
+      "calls": 13,
+      "bytes": 0
+     }
+    }
+   },
+   "steady": {
+    "frames": 1399,
+    "seconds": 15,
+    "fps": 93.3,
+    "p50": 8.4,
+    "p90": 16.7,
+    "p95": 17,
+    "p99": 25.2,
+    "max": 87.8,
+    "over16_7": 160,
+    "over20": 54,
+    "over33": 6,
+    "spikes": [
+     {
+      "t": 5.17,
+      "ms": 33.4,
+      "frames": 1
+     },
+     {
+      "t": 5.28,
+      "ms": 25.4,
+      "frames": 1
+     },
+     {
+      "t": 5.34,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 5.49,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 5.58,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 5.62,
+      "ms": 24.9,
+      "frames": 1
+     },
+     {
+      "t": 5.72,
+      "ms": 33.4,
+      "frames": 1
+     },
+     {
+      "t": 5.93,
+      "ms": 32.8,
+      "frames": 1
+     },
+     {
+      "t": 6.08,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 6.4,
+      "ms": 25.1,
+      "frames": 1
+     },
+     {
+      "t": 6.48,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 6.57,
+      "ms": 24.9,
+      "frames": 1
+     },
+     {
+      "t": 6.66,
+      "ms": 24.4,
+      "frames": 1
+     },
+     {
+      "t": 6.8,
+      "ms": 24.4,
+      "frames": 1
+     },
+     {
+      "t": 6.84,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 6.92,
+      "ms": 25.9,
+      "frames": 1
+     },
+     {
+      "t": 7.03,
+      "ms": 24.6,
+      "frames": 1
+     },
+     {
+      "t": 7.17,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 7.26,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 7.38,
+      "ms": 24.9,
+      "frames": 1
+     },
+     {
+      "t": 7.76,
+      "ms": 32.9,
+      "frames": 1
+     },
+     {
+      "t": 7.89,
+      "ms": 24.1,
+      "frames": 1
+     },
+     {
+      "t": 8.63,
+      "ms": 25.1,
+      "frames": 1
+     },
+     {
+      "t": 8.79,
+      "ms": 25.1,
+      "frames": 1
+     },
+     {
+      "t": 9.02,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 9.75,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 9.85,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 9.95,
+      "ms": 25.1,
+      "frames": 1
+     },
+     {
+      "t": 10.06,
+      "ms": 24.1,
+      "frames": 1
+     },
+     {
+      "t": 10.28,
+      "ms": 24.9,
+      "frames": 1
+     },
+     {
+      "t": 10.57,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 10.73,
+      "ms": 32.9,
+      "frames": 1
+     },
+     {
+      "t": 10.85,
+      "ms": 24.9,
+      "frames": 1
+     },
+     {
+      "t": 10.96,
+      "ms": 25.5,
+      "frames": 1
+     },
+     {
+      "t": 11.05,
+      "ms": 24.9,
+      "frames": 1
+     },
+     {
+      "t": 11.15,
+      "ms": 25.2,
+      "frames": 1
+     },
+     {
+      "t": 11.3,
+      "ms": 24.1,
+      "frames": 1
+     },
+     {
+      "t": 11.38,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 11.68,
+      "ms": 24.9,
+      "frames": 1
+     },
+     {
+      "t": 11.8,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 11.85,
+      "ms": 33.4,
+      "frames": 1
+     },
+     {
+      "t": 11.97,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 12.05,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 12.18,
+      "ms": 25.3,
+      "frames": 1
+     },
+     {
+      "t": 12.42,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 12.49,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 12.56,
+      "ms": 24.9,
+      "frames": 1
+     },
+     {
+      "t": 12.62,
+      "ms": 33.4,
+      "frames": 1
+     },
+     {
+      "t": 12.87,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 12.97,
+      "ms": 25,
+      "frames": 1
+     },
+     {
+      "t": 13.02,
+      "ms": 41.7,
+      "frames": 1
+     },
+     {
+      "t": 13.13,
+      "ms": 87.8,
+      "frames": 1
+     },
+     {
+      "t": 16.69,
+      "ms": 25.1,
+      "frames": 1
+     },
+     {
+      "t": 18.19,
+      "ms": 25.9,
+      "frames": 1
+     }
+    ],
+    "spikeCount": 54,
+    "period": {
+     "meanSec": 0.25,
+     "jitter": 2.09,
+     "regular": false
+    },
+    "longtasks": [],
+    "gl": {
+     "texSubImage2D": {
+      "calls": 733,
+      "bytes": 1688832
+     }
+    },
+    "heap": {
+     "mb": 31.7,
+     "minMb": 24.1,
+     "maxMb": 36.7,
+     "gcDrops": 4,
+     "growthKbPerSec": 2634.2
+    }
+   },
+   "errors": [],
+   "screenshot": "/private/tmp/iskry-perf/baseline-site.png",
+   "alloc": {
+    "kbPerSec": 0,
+    "top": []
+   },
+   "cpu": {
+    "seconds": 6.1,
+    "byFile": [
+     {
+      "pct": 98.3,
+      "ms": 5997.4,
+      "where": "((idle))"
+     },
+     {
+      "pct": 1.6,
+      "ms": 95.3,
+      "where": "((program))"
+     },
+     {
+      "pct": 0.2,
+      "ms": 10.6,
+      "where": "(tick)"
+     }
+    ],
+    "byFunction": [
+     {
+      "pct": 98.3,
+      "ms": 5997.4,
+      "where": "(idle) ((idle)):0"
+     },
+     {
+      "pct": 1.6,
+      "ms": 95.3,
+      "where": "(program) ((program)):0"
+     },
+     {
+      "pct": 0.2,
+      "ms": 10.6,
+      "where": "tick (tick):11"
+     }
+    ]
+   },
+   "repeat": 0
+  },
+  {
+   "page": "bare",
+   "url": "http://localhost:8791/?bare=1",
+   "otherLocalhostTabs": 5,
+   "otherLocalhostUrls": [
+    "http://localhost:8782/dev/road.html?cam=real",
+    "http://localhost:8793/",
+    "http://localhost:8784/dev/log.html?cam=near",
+    "http://localhost:8770/",
+    "http://localhost:8775/"
+   ],
+   "otherPages": 6,
+   "viewport": {
+    "w": 1800,
+    "h": 1021,
+    "dpr": 2,
+    "canvas": [
+     3600,
+     2042
+    ],
+    "visible": "hidden"
+   },
+   "quality": null,
+   "load": {
+    "firstFrameMs": 44.5,
+    "domContentLoadedMs": 92.6,
+    "programsLinked": 0,
+    "lastLinkMs": 0,
+    "sceneCompleteMs": 44.5,
+    "worstHitchMs": 38.7,
+    "framesOver33": 1,
+    "framesOver50": 0,
+    "hitches": [
+     {
+      "t": 0.09,
+      "ms": 25,
+      "frames": 2
+     },
+     {
+      "t": 2.84,
+      "ms": 38.7,
+      "frames": 1
+     }
+    ],
+    "longtasks": [],
+    "gl": {
+     "texImage2D": {
+      "calls": 7,
+      "bytes": 28
+     },
+     "texImage3D": {
+      "calls": 2,
+      "bytes": 8
+     }
+    }
+   },
+   "steady": {
+    "frames": 1288,
+    "seconds": 15,
+    "fps": 85.9,
+    "p50": 9.1,
+    "p90": 16.6,
+    "p95": 16.8,
+    "p99": 17.1,
+    "max": 25.2,
+    "over16_7": 87,
+    "over20": 2,
+    "over33": 0,
+    "spikes": [
+     {
+      "t": 5.71,
+      "ms": 25.2,
+      "frames": 1
+     },
+     {
+      "t": 5.88,
+      "ms": 22.6,
+      "frames": 1
+     }
+    ],
+    "spikeCount": 2,
+    "period": null,
+    "longtasks": [],
+    "gl": {},
+    "heap": {
+     "mb": 9.7,
+     "minMb": 9.4,
+     "maxMb": 9.7,
+     "gcDrops": 0,
+     "growthKbPerSec": 19.6
+    }
+   },
+   "errors": [],
+   "screenshot": "/private/tmp/iskry-perf/baseline-bare.png",
+   "alloc": {
+    "kbPerSec": 0,
+    "top": []
+   },
+   "cpu": {
+    "seconds": 6.1,
+    "byFile": [
+     {
+      "pct": 98.1,
+      "ms": 5958.7,
+      "where": "((idle))"
+     },
+     {
+      "pct": 1.7,
+      "ms": 103,
+      "where": "((program))"
+     },
+     {
+      "pct": 0.2,
+      "ms": 10.3,
+      "where": "(requestAnimationFrame)"
+     }
+    ],
+    "byFunction": [
+     {
+      "pct": 98.1,
+      "ms": 5958.7,
+      "where": "(idle) ((idle)):0"
+     },
+     {
+      "pct": 1.7,
+      "ms": 103,
+      "where": "(program) ((program)):0"
+     },
+     {
+      "pct": 0.2,
+      "ms": 10.3,
+      "where": "requestAnimationFrame (requestAnimationFrame):0"
+     }
+    ]
+   },
+   "repeat": 0
+  }
+ ]
+}
