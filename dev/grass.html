@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<!--
+  Iskry · dev/grass.html: test bench for js/scene/grass.js.
+  Serve the repo root (python3 -m http.server) and open /dev/grass.html.
+  Two modes:
+    close  (default)  a close-up by the fire, drag to orbit (shift/right-drag pans, wheel zooms).
+                      Presets: view=fire (backlit blades between us and the fire), edge (forest-side
+                      bracken), fence (rank grass along the fence), road (ruts and crown).
+    scene  ?mode=scene the real composition: camera (0,1.6,12) -> (0,4.1,-10), fov 40.
+  Neighbours are loaded when present (guarded): sky, fire, ground, road, fence, log, foreground, trees.
+  URL params: mode=close|scene, view=fire|edge|fence|road, rm=1 (reduced motion), nosky=1, nofire=1,
+    nonear=1 (no neighbouring near-world modules), notrees=1, gain=N (CSS brightness), wind=N, density=N, hour=H
+  window.bench.perf(n) measures the grass's GPU cost (renders with and without it, synced by readPixels).
+-->
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Iskry · grass bench</title>
+  <link rel="stylesheet" href="../css/tokens.css">
+  <style>
+    html, body { margin: 0; height: 100%; background: var(--night, #0b0705); overflow: hidden; }
+    #gl { position: fixed; inset: 0; }
+    #ui { position: fixed; left: 10px; top: 10px; font: 12px ui-monospace, monospace; color: #b39a82;
+          background: rgba(19, 13, 10, 0.72); padding: 6px 10px; border-radius: 6px; line-height: 1.9; }
+    #ui select, #ui input { font: inherit; background: #2a1b12; color: #f4e6d0; border: 1px solid #4a3426; }
+    #hud { position: fixed; left: 10px; bottom: 8px; font: 11px ui-monospace, monospace; color: #8b7563; white-space: pre; }
+  </style>
+  <script type="importmap">
+    { "imports": {
+        "three": "../vendor/three/three.module.js",
+        "three/addons/": "../vendor/three/addons/"
+    } }
+  </script>
+</head>
+<body>
+  <div id="gl"></div>
+  <div id="ui">
+    <label>mode <select id="mode"><option value="close">close-up</option><option value="scene">scene camera</option></select></label>
+    <label>view <select id="view"><option>fire</option><option>edge</option><option>fence</option><option>road</option></select></label>
+    <label><input id="grass" type="checkbox" checked> grass</label>
+  </div>
+  <div id="hud"></div>
+  <script type="module">
+    import * as THREE from 'three';
+    import { createGrass } from '../js/scene/grass.js';
+    import { FIRE } from '../js/scene/layout.js';
+
+    const q = new URLSearchParams(location.search);
+    window.__errors = [];
+    addEventListener('error', (e) => window.__errors.push(String(e.message)));
+    const $ = (id) => document.getElementById(id);
+    const mode = q.get('mode') === 'scene' ? 'scene' : 'close';
+    const view = q.get('view') || 'fire';
+    $('mode').value = mode; $('view').value = view;
+    const reload = () => { q.set('mode', $('mode').value); q.set('view', $('view').value); location.search = q.toString(); };
+    $('mode').addEventListener('change', reload); $('view').addEventListener('change', reload);
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: 'high-performance' });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(innerWidth, innerHeight);
+    renderer.setClearColor(0x000000, 0);
+    $('gl').appendChild(renderer.domElement);
+    if (q.has('gain')) renderer.domElement.style.filter = `brightness(${+q.get('gain') || 3})`;
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.Fog(new THREE.Color('#301d11'), 14, 72);
+    const camera = new THREE.PerspectiveCamera(40, innerWidth / innerHeight, 0.03, 450);
+    const css = getComputedStyle(document.documentElement);
+    const readToken = (name, fallback) => {
+      const v = css.getPropertyValue(name).trim();
+      if (!v) return fallback;
+      const n = parseFloat(v);
+      return /^-?[\d.]+(ms|px)?$/.test(v) && !isNaN(n) ? n : v;
+    };
+    const ctx = { scene, camera, renderer, reducedMotion: q.get('rm') === '1', readToken };
+    const modules = [];
+    const firePos = new THREE.Vector3(FIRE.x, FIRE.y, FIRE.z);
+    const wind = q.has('wind') ? +q.get('wind') : 0.25;
+    const load = async (name, factory, opts) => {
+      try {
+        const mod = await import(`../js/scene/${name}.js`);
+        const h = mod[factory](ctx, opts);
+        modules.push(h);
+        if (h.setTimeOfDay) h.setTimeOfDay(tod);
+        return h;
+      } catch (e) { console.warn('bench: module', name, 'unavailable', e.message); return null; }
+    };
+    const tod = { hour: 22, dusk: 0, night: 1, dawn: 0 };
+
+    if (q.get('nosky') !== '1') {
+      const sky = await load('sky', 'createSky', { horizonY: 0, radius: 90 });
+      if (sky && sky.fogColor) { scene.fog.color.copy(sky.fogColor); scene.fog.near = sky.fogNear; scene.fog.far = sky.fogFar; }
+    } else scene.background = new THREE.Color('#140d09');
+    let fire = null;
+    if (q.get('nofire') !== '1') fire = await load('fire', 'createFire', { position: firePos.clone(), scale: 1.3 });
+    if (!fire) { const l = new THREE.PointLight('#ff9a48', 30, 60, 2); l.position.set(FIRE.x, 0.8, FIRE.z); scene.add(l); }
+    if (q.get('nonear') !== '1') {
+      for (const [n, f] of [['ground', 'createGround'], ['road', 'createRoad'], ['fence', 'createFence'], ['log', 'createLog'], ['foreground', 'createForeground']]) {
+        await load(n, f, { firePosition: firePos.clone(), wind });
+      }
+    }
+    if (q.get('notrees') !== '1' && mode === 'scene') await load('trees', 'createTrees', { firePosition: firePos.clone(), wind, seed: 7 });
+
+    const t0 = performance.now();
+    const grass = createGrass(ctx, { firePosition: firePos.clone(), wind, density: q.has('density') ? +q.get('density') : 1 });
+    const createMs = performance.now() - t0;
+    grass.setTimeOfDay(tod);
+    modules.push(grass);
+    $('grass').addEventListener('change', () => { grass.group.visible = $('grass').checked; });
+    const s = grass.stats;
+    const info = `grass: init ${createMs.toFixed(0)} ms  draws ${s.drawCalls}  tris ${(s.triangles / 1000).toFixed(0)}k  ` +
+      Object.entries(s.instances).filter(([k]) => k !== 'plants').map(([k, v]) => `${k} ${v}`).join(' ') +
+      '\nplants: ' + Object.entries(s.instances.plants).map(([k, v]) => `${k} ${v}`).join(', ');
+
+    // ------------------------------------------------ camera
+    const VIEWS = {
+      fire: { pos: [-1.2, 0.55, 2.9], target: [FIRE.x + 0.4, 0.25, FIRE.z + 1.2] },
+      edge: { pos: [-5.2, 0.9, 2.5], target: [-9.5, 0.3, -3] },
+      fence: { pos: [1.5, 0.9, 3.5], target: [3.4, 0.4, -2.5] },
+      road: { pos: [0.2, 1.1, 6.5], target: [0.9, 0.0, 1.5] },
+    };
+    const sph = new THREE.Spherical(), target = new THREE.Vector3();
+    const applyOrbit = () => { camera.position.setFromSpherical(sph).add(target); camera.lookAt(target); };
+    if (mode === 'scene') {
+      camera.position.set(0, 1.6, 12);
+      camera.lookAt(0, 4.1, -10);
+    } else {
+      const v = VIEWS[view] || VIEWS.fire;
+      target.fromArray(v.target);
+      camera.position.fromArray(v.pos);
+      sph.setFromVector3(camera.position.clone().sub(target));
+      applyOrbit();
+      const el = renderer.domElement;
+      let drag = null;
+      el.addEventListener('pointerdown', (e) => { drag = { x: e.clientX, y: e.clientY, pan: e.button === 2 || e.shiftKey }; el.setPointerCapture(e.pointerId); });
+      el.addEventListener('pointerup', () => { drag = null; });
+      el.addEventListener('contextmenu', (e) => e.preventDefault());
+      el.addEventListener('pointermove', (e) => {
+        if (!drag) return;
+        const dx = e.clientX - drag.x, dy = e.clientY - drag.y; drag.x = e.clientX; drag.y = e.clientY;
+        if (drag.pan) {
+          const k = sph.radius * 0.0015;
+          const r = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 0), u = new THREE.Vector3().setFromMatrixColumn(camera.matrix, 1);
+          target.addScaledVector(r, -dx * k).addScaledVector(u, dy * k);
+        } else { sph.theta -= dx * 0.006; sph.phi = Math.min(3.1, Math.max(0.05, sph.phi - dy * 0.006)); }
+        applyOrbit();
+      });
+      el.addEventListener('wheel', (e) => { e.preventDefault(); sph.radius *= Math.exp(e.deltaY * 0.001); applyOrbit(); }, { passive: false });
+    }
+    window.view = (x, y, z, tx, ty, tz) => { camera.position.set(x, y, z); target.set(tx, ty, tz); sph.setFromVector3(camera.position.clone().sub(target)); applyOrbit(); };
+
+    // GPU cost: N synced frames with and without the grass
+    window.bench = { grass, scene, camera, renderer, modules, THREE };
+    window.bench.perf = (n = 60) => {
+      const gl = renderer.getContext();
+      const px = new Uint8Array(4);
+      const run = (visible) => {
+        grass.group.visible = visible;
+        renderer.render(scene, camera); gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        const t = performance.now();
+        for (let i = 0; i < n; i++) renderer.render(scene, camera);
+        gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+        return (performance.now() - t) / n;
+      };
+      const a = run(false), b = run(true), c = run(false), d = run(true);
+      grass.group.visible = true;
+      return { without: +((a + c) / 2).toFixed(3), with: +((b + d) / 2).toFixed(3), grass: +(((b + d) - (a + c)) / 2).toFixed(3),
+               calls: renderer.info.render.calls, size: [renderer.domElement.width, renderer.domElement.height] };
+    };
+
+    // GPU time from EXT_disjoint_timer_query_webgl2: frames alternate with / without the grass
+    window.bench.gpu = (n = 40) => new Promise((resolve) => {
+      const gl = renderer.getContext();
+      const ext = gl.getExtension('EXT_disjoint_timer_query_webgl2');
+      if (!ext) { resolve('no timer query'); return; }
+      const res = { on: [], off: [] }, pending = [];
+      let i = 0;
+      const step = () => {
+        if (i < n * 2) {
+          const on = (i & 1) === 0;
+          grass.group.visible = on;
+          const qy = gl.createQuery();
+          gl.beginQuery(ext.TIME_ELAPSED_EXT, qy);
+          renderer.render(scene, camera);
+          gl.endQuery(ext.TIME_ELAPSED_EXT);
+          pending.push([qy, on]);
+          i++;
+        }
+        for (let k = pending.length - 1; k >= 0; k--) {
+          const [qy, on] = pending[k];
+          if (gl.getQueryParameter(qy, gl.QUERY_RESULT_AVAILABLE)) {
+            if (!gl.getParameter(ext.GPU_DISJOINT_EXT)) (on ? res.on : res.off).push(gl.getQueryParameter(qy, gl.QUERY_RESULT) / 1e6);
+            gl.deleteQuery(qy); pending.splice(k, 1);
+          }
+        }
+        if (i >= n * 2 && pending.length === 0) {
+          grass.group.visible = true;
+          const med = (a) => { const b = a.slice().sort((x, y) => x - y); return b[b.length >> 1] || 0; };
+          resolve({ on: +med(res.on).toFixed(3), off: +med(res.off).toFixed(3), grass: +(med(res.on) - med(res.off)).toFixed(3), size: [renderer.domElement.width, renderer.domElement.height] });
+        } else requestAnimationFrame(step);
+      };
+      step();
+    });
+
+    addEventListener('resize', () => {
+      camera.aspect = innerWidth / innerHeight; camera.updateProjectionMatrix();
+      renderer.setSize(innerWidth, innerHeight);
+      for (const m of modules) if (m.resize) m.resize(innerWidth, innerHeight);
+    });
+    const clock = new THREE.Clock();
+    let fps = 0, acc = 0, frames = 0;
+    renderer.setAnimationLoop(() => {
+      const dt = Math.min(0.1, clock.getDelta()), t = clock.elapsedTime;
+      for (const m of modules) m.update(t, dt);
+      renderer.render(scene, camera);
+      acc += dt; frames++;
+      if (acc > 1) { fps = frames / acc; acc = 0; frames = 0; }
+      $('hud').textContent = `${info}\n${fps.toFixed(0)} fps  calls ${renderer.info.render.calls}  tris ${(renderer.info.render.triangles / 1000).toFixed(0)}k`;
+    });
+    window.__ready = true;
+  </script>
+</body>
+</html>
