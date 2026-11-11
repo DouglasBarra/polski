@@ -14,8 +14,9 @@
   WHAT IT DOES
     One THREE.Scene and one PerspectiveCamera, drawn by two renderers that share them:
       WebGLRenderer  -> #scene-world  the night. The environment lives in plug-in modules
-                        (js/scene/sky.js, stars.js, moon.js, trees.js, foreground.js,
-                        strings.js, fire.js; interface in CONTRACT.md).
+                        (js/scene/sky.js, stars.js, moon.js, trees.js, ground.js, road.js,
+                        grass.js, fence.js, log.js, foreground.js, strings.js, fire.js;
+                        interface in CONTRACT.md). Placement: js/scene/layout.js.
                         Each is loaded with a guarded dynamic import: if one is missing or
                         throws, the words still drift over the CSS night gradient.
       CSS3DRenderer  -> #scene-words  the words. Each is a real
@@ -54,13 +55,15 @@
 */
 import * as THREE from "three";
 import { CSS3DRenderer, CSS3DSprite } from "three/addons/renderers/CSS3DRenderer.js";
+// Where things stand in the near world: one source of truth for the core and every module.
+import { CAMERA, FIRE } from "./scene/layout.js";
 
 const Iskry = (window.Iskry = window.Iskry || {});
 const TAU = Math.PI * 2;
 
 // Look-and-feel knobs that are not design tokens. Distances are metres; ground is y = 0.
 const TUNE = {
-  cameraPos: [0, 1.6, 12],     // eye height of someone sitting back from the fire
+  cameraPos: [CAMERA.x, CAMERA.y, CAMERA.z],   // eye height of someone sitting back from the fire (layout.js)
   cameraLook: [0, 4.1, -10],   // pitched up a little: the horizon sits about 2/3 down
   cameraEase: 1.4,             // s, how lazily the camera follows the pointer
   cameraParallaxY: 0.35,       // vertical share of --camera-parallax
@@ -79,11 +82,9 @@ const TUNE = {
   minSpawnGap: 900,            // ms, never spawn faster than this while catching up
   fireReach: 13,               // m, words within this of the fire breathe with its flicker
   fireDim: 0.12,               // how much a word next to the fire dims when the fire dips
-  firePos: [-3, 0, -2],        // left of centre, so the embers blow across the middle
+  firePos: [FIRE.x, FIRE.y, FIRE.z],           // left of centre, so the embers blow across the middle (layout.js)
   fireScale: 1.3,              // a hearth, not a candle
   treeSeed: 7,                 // the same forest every visit
-  stork: { x: -16, z: -19, height: 6.4 },  // the stork's pole, out at the left edge of the words' band
-  shrine: { x: 3.3, z: -3.2, faceX: -1, faceZ: 0.6 },  // the kapliczka, nearer, so the far church reads
   heatLift: 0.14,              // m, how far the warm air above the fire lifts a word
   heatWidth: 2.6,              // m, half-width of the warm column (gaussian)
   heatDepth: 7,                // m, how far in front of or behind the fire it is felt
@@ -124,7 +125,11 @@ const pool = [];             // valid word objects from the dataset
 const poolById = Object.create(null);
 const live = [];             // word states on screen
 const onScreen = Object.create(null); // id -> state
-const modules = { sky: null, stars: null, moon: null, trees: null, foreground: null, strings: null, fire: null };
+const modules = {
+  sky: null, stars: null, moon: null, trees: null,
+  ground: null, road: null, grass: null, fence: null, log: null, foreground: null,
+  strings: null, fire: null
+};
 let modulesEpoch = 0;
 let T = {};                  // tokens
 let mq = null, reduced = false;
@@ -316,9 +321,18 @@ function moduleTable() {
   const date = new Date();
   return [
     ["stars", "createStars", () => ({ date, latitudeDeg: PLACE.latitudeDeg, longitudeDeg: PLACE.longitudeDeg })],
-    ["moon", "createMoon", () => ({ date })],
+    ["moon", "createMoon", () => ({
+      date, latitudeDeg: PLACE.latitudeDeg, longitudeDeg: PLACE.longitudeDeg,
+      facingAzDeg: modules.stars && Number.isFinite(modules.stars.facingAzDeg) ? modules.stars.facingAzDeg : 120
+    })],
     ["trees", "createTrees", () => ({ firePosition: v(TUNE.firePos), wind, seed: TUNE.treeSeed })],
-    ["foreground", "createForeground", () => ({ firePosition: v(TUNE.firePos), wind, stork: TUNE.stork, shrine: TUNE.shrine })],
+    // The near world. Placement comes from layout.js; only the shared fire and wind are passed.
+    ["ground", "createGround", () => ({ firePosition: v(TUNE.firePos), wind })],
+    ["road", "createRoad", () => ({ firePosition: v(TUNE.firePos), wind })],
+    ["grass", "createGrass", () => ({ firePosition: v(TUNE.firePos), wind })],
+    ["fence", "createFence", () => ({ firePosition: v(TUNE.firePos), wind })],
+    ["log", "createLog", () => ({ firePosition: v(TUNE.firePos), wind })],
+    ["foreground", "createForeground", () => ({ firePosition: v(TUNE.firePos), wind })],
     ["strings", "createStrings", () => ({
       count: Math.max(1, Math.round(Number(readToken("--strings-count", 6)) || 6)),
       extents: Object.assign({}, TUNE.stringExtents),

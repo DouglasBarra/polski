@@ -16,8 +16,8 @@ Iskry ("sparks") is a place to meet Polish words for pleasure. No lessons, level
 
 | File | Owner |
 |---|---|
-| `index.html`, `css/tokens.css`, `css/main.css` BASE and SCENE sections, `js/scene.js`, `vendor/`, `README.md`, `CONTRACT.md` | director |
-| `js/scene/sky.js`, `stars.js` (+ its star catalogue), `moon.js`, `trees.js`, `foreground.js`, `strings.js`, `fire.js`, each with its test page `dev/<name>.html` | one environment agent each (sky, stars, moon, trees, foreground, strings, fire) |
+| `index.html`, `css/tokens.css`, `css/main.css` BASE and SCENE sections, `js/scene.js`, `js/scene/layout.js`, `vendor/`, `README.md`, `CONTRACT.md` | director |
+| `js/scene/sky.js`, `stars.js` (+ `stars-data.js`), `moon.js`, `trees.js`, `ground.js`, `road.js`, `grass.js`, `fence.js`, `log.js`, `foreground.js`, `strings.js`, `fire.js`, each with its test page `dev/<name>.html` | one environment agent each (sky, stars, moon, trees, ground, road, grass, fence, log, foreground, strings, fire) |
 | `js/memory.js`, `js/journal.js`, `css/journal.css`, `dev/journal.html`, `tests/` | memory agent |
 | `js/card.js`, `css/main.css` CARD section | card agent |
 | `data/words.js` | words agent |
@@ -54,20 +54,27 @@ ctx    = { scene, camera, renderer, reducedMotion, readToken(name, fallback) }
 handle = { group, update(timeSec, dtSec), resize(width, height), dispose() }
 sky        opts { horizonY, radius }                       + { fogColor, fogNear, fogFar, setMoon(direction, illumination) }   // fog: suggestions
 stars      opts { date, latitudeDeg, longitudeDeg }                                         // the real sky over Poland tonight
-moon       opts { date }                                   + { direction, phase, illumination }
+moon       opts { date, latitudeDeg, longitudeDeg, facingAzDeg } + { direction, phase, illumination }   // real position when in frame, else 21° right and 18.5° up; never below 12°
 trees      opts { firePosition, wind, seed }               (also exports buildDouglasFir, buildBirch)
-foreground opts { firePosition, wind, stork, shrine }       + { layout }                      // stork { x, z, height }, shrine { x, z, faceX, faceZ }
+ground     opts { firePosition, wind }                      // the near floor out to 30 m: soil, moss, the ash ring, leaves, stones
+road       opts { firePosition, wind }                      // the field road
+grass      opts { firePosition, wind }                      // November meadow plants
+fence      opts { firePosition, wind }                      // the split-rail fence
+log        opts { firePosition, wind }                      // the log bench and the guitar
+foreground opts { firePosition, wind }                      + { layout }                      // the shrine and the stork
 strings    opts { count, extents, firePosition }           + { touch(prevPos, pos), pluckNearest(worldPos, strength), nearestPoint(worldPos) }
 fire       opts { position, scale }                        + { light, intensity() }          // flicker 0..1
 ```
 
 Optional on any handle: `setTimeOfDay({ hour, dusk, night, dawn })` (the weights sum to 1). The core calls it on load and every 20 s from the visitor's clock (dusk peaks at 17:30, deep night runs 20:00 to 03:30, dawn peaks around 06:30 to 07:00; the fire is always lit, so daytime shows as early night: dusk 0.3, night 0.7), then re-applies the sky's fog. `?hour=5.5` pins the clock. When both the sky and the moon are loaded, the core calls `sky.setMoon(moon.direction, moon.illumination)`.
 
+**Layout.** `js/scene/layout.js` (director) is the single source of truth for where things stand in the near world: `CAMERA`, `FIRE`, `ZONES` (near world out to 30 m, the sky's landscape from 36 m), the field road (`ROAD`, `roadPoint`, `roadProject`, `roadDistance`), `FENCE`, `SHRINE`, `STORK`, `BENCH`, `GUITAR` and `KEEP_OUT` / `inKeepOut` for ground cover. Pure data and maths, no three.js, no side effects; every module and the core import it. Move a prop there, not in a module.
+
 `wind` is the mean wind in m/s along +x. The place is central Poland (52.1° N, 19.4° E); `date` is the visitor's clock at load.
 
 **Compass.** The camera's -z faces azimuth 120° (ESE), fixed (`stars` opts `facingAzDeg` overrides). World +x is azimuth 210° (SSW), +z is 300° (WNW): compass azimuth A is the world direction (sin(A - 120°), 0, -cos(A - 120°)). The stars handle exposes `facingAzDeg` and `horizonToWorld(altDeg, azDeg, outVec3)`. On November evenings Orion rises left of centre; the November sun rises near 124° (ahead) and sets near 236° (behind, to the right, off screen). Load order: sky, then stars, then moon; the others in parallel with the stars. The stars read the visitor's local wall-clock time as the same time in Warsaw (`wallClock: true`, the default): 21:00 for the visitor shows the sky of 21:00 by a Polish fire.
 
-Who draws what: `sky` the dome, haze, distant land (hills, the Tatras in the haze, a village) and fog; `stars` the stars and the Milky Way; `moon` the moon; `trees` **every tree**: the Douglas-fir treeline about 50 to 56 m out with a dip behind the fire, the side stands at 15 to 35 m and the birches (the sky and the foreground draw no trees); `foreground` the Polish countryside props within about 30 m (fence, wayside shrine, bench, grass, path), mostly low on the screen and at the edges, lit by `fire.light`; `strings` the guitar strings; `fire` the bonfire. Each module's frame budget is about 2 ms.
+Who draws what: `sky` the dome, haze, distant land (hills, the Tatras in the haze, a village) and fog; `stars` the stars and the Milky Way; `moon` the moon; `trees` **every tree**: the Douglas-fir treeline about 50 to 56 m out with a dip behind the fire, the side stands at 12 to 35 m (the nearest partly cropped by the frame) and the birches (the sky and the foreground draw no trees); the near world within about 30 m, mostly low on the screen and at the edges and lit by `fire.light`: `ground` the floor, `road` the field road, `grass` the meadow plants, `fence` the fence, `log` the bench and guitar, `foreground` the wayside shrine (kapliczka) and the stork on its pole; `strings` the guitar strings; `fire` the bonfire. Each module's frame budget is about 2 ms; the near world together (ground 0.4, grass 0.7, road 0.2, fence 0.3, log 0.2 ms) about 2 ms at DPR 2. Draw order: sky dome -100, Milky Way -91, stars -90, moon disc -80 (opaque, writes depth, so no star shows through it), moon halo -79, land -50, ground just above -45, road just above the ground, lake -44, mist -40.
 
 The core loads the sky first, then all the others in parallel, each with a guarded dynamic `import()`: a missing or throwing module is logged and skipped and the words drift on. Modules have no global side effects (no `scene.fog`, background or renderer settings) and make no per-frame allocations. The core calls `update` every frame, `strings.touch(prev, pos)` for every drifting word, `strings.pluckNearest` on a pluck, applies the sky's fog to `scene.fog` and to `--scene-fog` (the far words' tint), and lets `fire.intensity()` breathe on the words near the fire. Modules are rebuilt when reduced motion changes. `?bare=1` skips them.
 
