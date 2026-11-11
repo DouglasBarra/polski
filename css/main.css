@@ -262,6 +262,13 @@ button {
   data-anchored on .card-root. Only transform and opacity ever animate.
 */
 
+/* Local tokens. JS reads --card-dur-reveal from #card-root. */
+.card-root {
+  --card-dur-reveal: 700ms;   /* the "remember?" veil lifting */
+  --card-veil-blur: 6px;
+  --card-veil-ghost: 0.6;     /* opacity of the blurred English under the veil */
+}
+
 /* --- Backdrop: dims the sky but leaves a soft clearing around the held word --- */
 .card-root__backdrop {
   position: absolute;
@@ -494,8 +501,13 @@ button {
   color: var(--muted);
 }
 
-.card__meaning {
+.card__sense {
+  position: relative;
   margin: 1rem 0 0;
+}
+
+.card__meaning {
+  margin: 0;
   font-family: var(--font-en);
   font-style: italic;
   font-size: var(--size-card-meaning);
@@ -532,6 +544,127 @@ button {
   color: var(--muted);
   overflow-wrap: break-word;
   text-wrap: pretty;
+}
+
+/* --- "remember?": a soft warm mist over the English, lifted on request ---
+   While veiled the real English is transparent and a blurred ghost copy of it
+   (.card__ghost, aria-hidden) sits on top. Lifting crossfades ghost to text, so only
+   opacity animates. Veiling is instant; only .is-revealing has transitions. */
+.card__example-en-wrap {
+  position: relative;
+  margin: 0.35rem 0 0;
+}
+
+.card__example-en-wrap .card__example-en {
+  margin: 0;
+}
+
+.card__meaning:focus {
+  outline: none;
+}
+
+.card__ghost {
+  position: absolute;
+  inset: 0;
+  overflow: visible;
+  filter: blur(var(--card-veil-blur));
+  opacity: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.card__ghost--meaning {
+  font-family: var(--font-en);
+  font-style: italic;
+  font-size: var(--size-card-meaning);
+  line-height: 1.35;
+  color: var(--cream);
+  text-wrap: pretty;
+}
+
+.card__ghost--example {
+  font-family: var(--font-en);
+  font-style: italic;
+  font-size: var(--size-small);
+  line-height: var(--leading);
+  color: var(--muted);
+  overflow-wrap: break-word;
+  text-wrap: pretty;
+  filter: blur(calc(var(--card-veil-blur) * 0.7));
+}
+
+.card.is-veiled .card__meaning,
+.card.is-veiled .card__example-en {
+  opacity: 0;
+}
+
+.card.is-veiled .card__ghost {
+  opacity: var(--card-veil-ghost);
+}
+
+.card.is-veiled .card__example-en-wrap {
+  cursor: pointer;
+}
+
+/* The veil button is the whole meaning line, a little larger than the text. */
+.card__veil {
+  position: absolute;
+  inset: -0.45rem -0.7rem;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 0.7rem;
+  font-family: var(--font-en);
+  font-style: italic;
+  font-size: var(--size-small);
+  letter-spacing: 0.02em;
+  color: var(--ember);
+  border-radius: calc(var(--card-radius) * 0.75);
+  opacity: 1;
+}
+
+/* A faint warm glow behind the invitation; hover and focus only brighten it. */
+.card__veil::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: radial-gradient(ellipse 28% 50% at 72% 50%, var(--glow-soft), transparent 100%);
+  opacity: 0.4;
+  transition: opacity var(--dur-hover) var(--ease-in-out);
+  pointer-events: none;
+}
+
+.card__veil:hover::before,
+.card__veil:focus-visible::before {
+  opacity: 1;
+}
+
+.card__veil-text {
+  position: relative;
+  opacity: 0.8;
+  transition: opacity var(--dur-hover) var(--ease-in-out);
+}
+
+.card__veil:hover .card__veil-text,
+.card__veil:focus-visible .card__veil-text {
+  opacity: 1;
+}
+
+.card__veil:focus-visible {
+  outline-offset: 0;
+}
+
+.card.is-revealing .card__veil {
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity calc(var(--card-dur-reveal) * 0.6) var(--ease-out-soft);
+}
+
+.card.is-revealing .card__meaning,
+.card.is-revealing .card__example-en,
+.card.is-revealing .card__ghost {
+  transition: opacity var(--card-dur-reveal) var(--ease-out-soft);
 }
 
 /* --- Related words --- */
@@ -632,6 +765,10 @@ button {
 
   .card.is-rare::after {
     animation: none;
+  }
+
+  .card-root {
+    --card-dur-reveal: 1ms;
   }
 }
 

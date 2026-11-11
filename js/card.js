@@ -13,6 +13,16 @@
       even after the card has switched to a related word.
     - Related words re-render the same card in place (crossfade, no event, no movement).
     - Calls Iskry.memory.record(id) on every word shown.
+    - "Remember?" (Phase 2): for every showing (open and each related-word switch) it asks
+      Iskry.memory.hideTranslation(id) once, BEFORE record(id). When true on an open (a
+      related-word switch never veils: its English was just on the chip), the Polish word,
+      respelling and Polish example show as usual, but the English meaning and the English
+      example are replaced by a soft blurred "ghost" of themselves (.card__ghost, always
+      aria-hidden; the real text stays in place, transparent). The meaning line is covered
+      by a real <button> (.card__veil, "remember?"); a click, Enter or Space on it, or a
+      click on the misted example translation, crossfades ghost to text (opacity only,
+      instant under reduced motion). It stays lifted for that showing. Never a quiz: there
+      is no answer and no judgement.
 
   ACCESSIBILITY
     - role="dialog", aria-modal="true": the card is MODAL. aria-labelledby is the word,
@@ -23,6 +33,11 @@
     - After switching to a related word, focus moves to the new word (tabindex="-1") so a
       screen reader announces it and the keyboard user is not dropped on <body>.
     - Motion is driven by CSS and the --dur-* tokens; reduced motion is opacity only.
+    - While veiled, the English meaning and example are aria-hidden and the dialog has no
+      aria-describedby (a description reference would read hidden text). The veil button
+      sits in the tab order after the close button. On reveal, focus moves from the veil
+      to the meaning (tabindex="-1") so a screen reader reads it; the veil leaves the tab
+      order at once and is removed from layout when its fade ends.
 
   All text from data goes in with textContent. Never innerHTML.
 */
@@ -47,6 +62,9 @@ window.Iskry = window.Iskry || {};
   var swapTimer = 0;
   var swapTarget = null;
   var resizeFrame = 0;
+
+  var veiled = false;       // the English of the shown word is under the veil
+  var veilTimer = 0;
 
   /* ---------- small helpers ---------- */
 
@@ -135,15 +153,34 @@ window.Iskry = window.Iskry || {};
     word.tabIndex = -1;
 
     var respelling = el("p", "card__respelling");
+
+    // The meaning and, when the word is veiled, the button that covers it.
+    var sense = el("div", "card__sense");
     var meaning = el("p", "card__meaning");
     meaning.id = "iskry-card-meaning";
+    meaning.tabIndex = -1;
+    var veil = el("button", "card__veil");
+    veil.type = "button";
+    veil.setAttribute("aria-label", "Remember? Show the meaning");
+    veil.appendChild(el("span", "card__veil-text", "remember?"));
+    veil.hidden = true;
+    var meaningGhost = el("span", "card__ghost card__ghost--meaning");
+    meaningGhost.setAttribute("aria-hidden", "true");
+    sense.appendChild(meaning);
+    sense.appendChild(meaningGhost);
+    sense.appendChild(veil);
 
     var example = el("div", "card__example");
     var examplePl = el("p", "card__example-pl");
     examplePl.lang = "pl";
     var exampleEn = el("p", "card__example-en");
+    var exampleEnWrap = el("div", "card__example-en-wrap");
+    var exampleGhost = el("span", "card__ghost card__ghost--example");
+    exampleGhost.setAttribute("aria-hidden", "true");
+    exampleEnWrap.appendChild(exampleEn);
+    exampleEnWrap.appendChild(exampleGhost);
     example.appendChild(examplePl);
-    example.appendChild(exampleEn);
+    example.appendChild(exampleEnWrap);
 
     var family = el("div", "card__family");
     family.setAttribute("role", "group");
@@ -157,7 +194,7 @@ window.Iskry = window.Iskry || {};
     content.appendChild(rare);
     content.appendChild(word);
     content.appendChild(respelling);
-    content.appendChild(meaning);
+    content.appendChild(sense);
     content.appendChild(example);
     content.appendChild(family);
 
@@ -169,8 +206,9 @@ window.Iskry = window.Iskry || {};
 
     els = {
       backdrop: backdrop, card: card, close: close, content: content, rare: rare,
-      word: word, respelling: respelling, meaning: meaning, example: example,
-      examplePl: examplePl, exampleEn: exampleEn, family: family, familyList: familyList
+      word: word, respelling: respelling, sense: sense, meaning: meaning, veil: veil,
+      meaningGhost: meaningGhost, example: example, examplePl: examplePl,
+      exampleEn: exampleEn, exampleEnWrap: exampleEnWrap, exampleGhost: exampleGhost, family: family, familyList: familyList
     };
   }
 
@@ -191,8 +229,56 @@ window.Iskry = window.Iskry || {};
     return li;
   }
 
+  /* ---------- the "remember?" veil ---------- */
+
+  function setVeil(on) {
+    clearTimeout(veilTimer);
+    veilTimer = 0;
+    veiled = on;
+    els.card.classList.toggle("is-veiled", on);
+    els.card.classList.remove("is-revealing");
+    els.veil.hidden = !on;
+    els.veil.removeAttribute("tabindex");
+    els.veil.removeAttribute("aria-hidden");
+    if (on) {
+      els.meaning.setAttribute("aria-hidden", "true");
+      els.exampleEn.setAttribute("aria-hidden", "true");
+      els.card.removeAttribute("aria-describedby");
+    } else {
+      els.meaning.removeAttribute("aria-hidden");
+      els.exampleEn.removeAttribute("aria-hidden");
+      els.card.setAttribute("aria-describedby", "iskry-card-meaning");
+    }
+  }
+
+  // Lift the veil for this showing. Calm fade, then the button leaves the layout.
+  function reveal() {
+    if (!veiled || !isLive()) return;
+    var hadFocus = document.activeElement === els.veil;
+    veiled = false;
+    els.meaning.removeAttribute("aria-hidden");
+    els.exampleEn.removeAttribute("aria-hidden");
+    els.card.setAttribute("aria-describedby", "iskry-card-meaning");
+    els.veil.tabIndex = -1;
+    els.veil.setAttribute("aria-hidden", "true");
+    els.card.classList.remove("is-veiled");
+    els.card.classList.add("is-revealing");
+    if (hadFocus) {
+      try {
+        els.meaning.focus({ preventScroll: true });
+      } catch (err) {
+        els.meaning.focus();
+      }
+    }
+    veilTimer = setTimeout(function () {
+      veilTimer = 0;
+      els.card.classList.remove("is-revealing");
+      els.veil.hidden = true;
+    }, token("--card-dur-reveal", 700));
+  }
+
   // Fill the card with one word. Never touches position or state.
-  function render(word) {
+  function render(word, hideEnglish) {
     var isRare = !!word.rare;
     els.card.classList.toggle("is-rare", isRare);
     els.rare.hidden = !isRare;
@@ -201,12 +287,12 @@ window.Iskry = window.Iskry || {};
     els.respelling.textContent = str(word.respelling);
     els.respelling.hidden = !str(word.respelling);
     els.meaning.textContent = str(word.en);
-    els.meaning.hidden = !str(word.en);
+    els.sense.hidden = !str(word.en);
 
     var ex = word.example || {};
     els.examplePl.textContent = str(ex.pl);
     els.exampleEn.textContent = str(ex.en);
-    els.exampleEn.hidden = !str(ex.en);
+    els.exampleEnWrap.hidden = !str(ex.en);
     els.example.hidden = !str(ex.pl);
 
     els.familyList.textContent = "";
@@ -220,12 +306,28 @@ window.Iskry = window.Iskry || {};
     }
     els.family.hidden = els.familyList.childNodes.length === 0;
 
+    // Only veil when there is a meaning to remember.
+    var veil = !!hideEnglish && !!str(word.en);
+    els.meaningGhost.textContent = veil ? str(word.en) : "";
+    els.exampleGhost.textContent = veil ? str(ex.en) : "";
+    setVeil(veil);
+
     els.card.scrollTop = 0;
   }
 
-  function show(id) {
+  // fromSwitch: shown via a related-word chip. Its English was just visible on the chip,
+  // so it is never veiled; hideTranslation is still asked (before record) so memory's
+  // rhythm is the same for every showing, and its answer is ignored.
+  function show(id, fromSwitch) {
     viewId = id;
-    render(words[id]);
+    // Ask once per showing, before record(id).
+    var hideEnglish = false;
+    try {
+      if (Iskry.memory && typeof Iskry.memory.hideTranslation === "function") {
+        hideEnglish = Iskry.memory.hideTranslation(id) === true;
+      }
+    } catch (err) { hideEnglish = false; }
+    render(words[id], hideEnglish && !fromSwitch);
     try {
       if (Iskry.memory && typeof Iskry.memory.record === "function") Iskry.memory.record(id);
     } catch (err) { /* memory must never break the card */ }
@@ -331,6 +433,7 @@ window.Iskry = window.Iskry || {};
     clearTimeout(stateTimer);
     stateTimer = 0;
     cancelSwap();
+    setVeil(false);
     root.hidden = true;
     setState("closed");
     catchId = null;
@@ -401,7 +504,7 @@ window.Iskry = window.Iskry || {};
         els.content.classList.remove("is-swapping");
         return;
       }
-      show(target);
+      show(target, true);
       keepInView();
       els.content.classList.remove("is-swapping");
       try {
@@ -418,7 +521,7 @@ window.Iskry = window.Iskry || {};
     var list = els.card.querySelectorAll("button:not([disabled])");
     var out = [];
     for (var i = 0; i < list.length; i++) {
-      if (list[i].getClientRects().length) out.push(list[i]);
+      if (list[i].tabIndex >= 0 && list[i].getClientRects().length) out.push(list[i]);
     }
     return out;
   }
@@ -484,10 +587,16 @@ window.Iskry = window.Iskry || {};
 
       els.close.addEventListener("click", close);
       els.backdrop.addEventListener("click", close);
+      els.veil.addEventListener("click", reveal);
       els.card.addEventListener("click", function (event) {
         var target = event.target;
-        var item = target && target.closest ? target.closest(".card__family-item") : null;
-        if (item && els.card.contains(item)) swapTo(item.getAttribute("data-id"));
+        if (!target || !target.closest) return;
+        var item = target.closest(".card__family-item");
+        if (item && els.card.contains(item)) {
+          swapTo(item.getAttribute("data-id"));
+        } else if (veiled && target.closest(".card__example-en-wrap")) {
+          reveal(); // a pointer shortcut; keyboard users have the veil button
+        }
       });
 
       document.addEventListener("word:catch", onCatch);

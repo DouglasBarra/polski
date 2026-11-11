@@ -39,7 +39,7 @@
                                  day) and then only about 1 time in HIDE_CHANCE_INV (4).
                                  It is random: call it once per showing, and it does not
                                  matter whether it is called before or after record(id).
-                                 The card agent consumes this (not yet wired in Phase 2).
+                                 The card agent consumes this.
                                  Synchronous, never throws, false for unknown ids.
 
   EVENT
