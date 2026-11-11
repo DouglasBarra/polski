@@ -4,7 +4,9 @@
   CONTRACT
   - Tokens from css/tokens.css only. Local custom properties live on .journal-root.
   - Selectors start with .journal (journal-root, journal-toggle, journal, journal__*).
-  - Animate transform and opacity only. Reduced motion: a fade, no slide.
+  - Animate transform and opacity only (one exception: the mist over the English, a
+    small blur on a few short words). Reduced motion: a fade, no slide, and the mist
+    lifts at once.
   - Sits below the card (z-index under --z-card), so an open card always wins.
 */
 
@@ -98,7 +100,54 @@
 .journal__head {
   position: relative;
   flex: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
   padding: var(--journal-pad) calc(var(--journal-pad) + 2rem) 1rem var(--journal-pad);
+}
+
+/* --- Mist: a small toggle. On, the English sinks into a soft mist until you rest on a word --- */
+.journal__mist {
+  flex: none;
+  padding: 0.1rem 0.75rem 0.2rem;
+  border: 1px solid var(--card-border);
+  border-radius: 999px;
+  font-family: var(--font-en);
+  font-style: italic;
+  font-size: var(--size-small);
+  line-height: 1.4;
+  color: var(--muted);
+  opacity: 0.7;
+  transition: opacity var(--dur-hover) var(--ease-in-out), color var(--dur-hover) var(--ease-in-out);
+}
+
+.journal__mist:hover,
+.journal__mist:focus-visible {
+  color: var(--ember-bright);
+  opacity: 1;
+}
+
+.journal__mist:focus-visible {
+  border-radius: 999px;
+}
+
+.journal__mist[aria-pressed="true"] {
+  color: var(--ember-bright);
+  border-color: var(--ember-dim);
+  background-image: radial-gradient(ellipse at 50% 120%, var(--glow-strong), var(--glow-soft) 60%, transparent 100%);
+  opacity: 1;
+}
+
+.journal__hint {
+  margin: 0.9rem 0 0;
+  font-family: var(--font-en);
+  font-style: italic;
+  font-size: var(--size-small);
+  line-height: 1.4;
+  color: var(--muted);
+  opacity: 0.8;
+  text-wrap: balance;
 }
 
 .journal__title {
@@ -214,13 +263,35 @@
   list-style: none;
 }
 
+/* Tonight's catches come first, a little warmer. */
+.journal__group--tonight .journal__theme {
+  color: var(--ember);
+}
+
 .journal__entry {
+  margin: 0;
+}
+
+/* Each word is a button: press it to open the word in place. */
+.journal__word {
   display: flex;
   align-items: baseline;
   flex-wrap: wrap;
   column-gap: 0.7em;
+  width: 100%;
   padding: 0.3rem 0;
   line-height: 1.3;
+  text-align: left;
+}
+
+.journal__word:focus-visible {
+  outline-offset: 2px;
+}
+
+.journal__word:hover .journal__pl,
+.journal__word:focus-visible .journal__pl,
+.journal__entry.is-open .journal__pl {
+  color: var(--ember-bright);
 }
 
 .journal__pl {
@@ -228,12 +299,83 @@
   font-weight: var(--weight-pl);
   font-size: var(--size-card-meaning);
   color: var(--ember);
+  transition: color var(--dur-hover) var(--ease-in-out);
 }
 
 .journal__en {
   font-family: var(--font-en);
   font-style: italic;
   font-size: var(--size-small);
+  color: var(--muted);
+  transition: opacity var(--dur-hover) var(--ease-in-out), filter var(--dur-hover) var(--ease-in-out);
+}
+
+/* The mist: the meaning is there but cannot be read, until you rest on the word
+   (pointer or keyboard) or open it. */
+.journal.is-misted .journal__en {
+  filter: blur(0.42em);
+  opacity: 0.5;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+.journal.is-misted .journal__word:hover .journal__en,
+.journal.is-misted .journal__word:focus-visible .journal__en,
+.journal.is-misted .journal__entry.is-open .journal__en {
+  filter: none;
+  opacity: 1;
+}
+
+/* --- A word opened in place: how to say it, and its example --- */
+.journal__more {
+  margin: 0.1rem 0 0.7rem 0.15rem;
+  padding: 0.1rem 0 0.15rem 0.9rem;
+  border-left: 1px solid var(--card-border);
+  animation: journal-more-in var(--dur-card-open) var(--ease-out-soft) both;
+}
+
+@keyframes journal-more-in {
+  from { opacity: 0; transform: translateY(-0.25rem); }
+  to { opacity: 1; transform: none; }
+}
+
+.journal__more p {
+  margin: 0;
+}
+
+.journal__respelling {
+  font-family: var(--font-en);
+  font-size: var(--size-small);
+  letter-spacing: 0.04em;
+  color: var(--muted);
+}
+
+.journal__stress {
+  color: var(--ember);
+}
+
+.journal__example-pl {
+  margin-top: 0.35rem;
+  font-family: var(--font-pl);
+  font-weight: var(--weight-pl);
+  font-size: var(--size-card-example);
+  line-height: 1.4;
+  color: var(--cream);
+}
+
+.journal__more .journal__example-pl {
+  margin-top: 0.35rem;
+}
+
+.journal__hit {
+  color: var(--ember);
+}
+
+.journal__example-en {
+  font-family: var(--font-en);
+  font-style: italic;
+  font-size: var(--size-small);
+  line-height: 1.4;
   color: var(--muted);
 }
 
@@ -272,5 +414,13 @@
   .journal,
   .journal.is-open {
     transform: none;
+  }
+
+  .journal__more {
+    animation: none;
+  }
+
+  .journal__en {
+    transition: none;
   }
 }

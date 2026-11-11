@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Iskry dev: journal</title>
-  <!-- ?empty=1 empty state · ?open=1 open on load · ?keep=1 keep this page's stored memory -->
+  <!-- ?empty=1 empty state · ?open=1 open on load · ?mist=1 mist on · ?v1=1 seed old v1 storage (migration) · ?keep=1 keep this page's stored memory -->
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,300..600;1,9..144,300..600&family=Lora:ital,wght@0,400..600;1,400..600&display=swap&subset=latin-ext" rel="stylesheet">
@@ -20,43 +20,56 @@
   </style>
   <script>
     // Seed this origin's memory before memory.js loads (dev page only).
+    // Default: v2 data (stages, tonight's catches, a word only opened from a chip).
+    // ?v1=1 seeds the old iskry.memory.v1 shape instead, to watch the migration.
     (function () {
       var q = new URLSearchParams(location.search);
       if (q.get("keep")) return;
-      var KEY = "iskry.memory.v1", DAY = 864e5, now = Date.now(), words = {};
-      function seed(id, count, daysAgo) {
-        var d = [];
-        for (var i = daysAgo.length - 1; i >= 0; i--) {
-          var t = new Date(now - daysAgo[i] * DAY - 4 * 36e5);
-          d.push(t.getFullYear() + "-" + String(t.getMonth() + 1).padStart(2, "0") + "-" + String(t.getDate()).padStart(2, "0"));
-        }
-        words[id] = { c: count, f: now - Math.max.apply(null, daysAgo) * DAY, l: now - Math.min.apply(null, daysAgo) * DAY, d: d };
+      var V2 = "iskry.memory.v2", V1 = "iskry.memory.v1", DAY = 864e5, now = Date.now(), v2 = {}, v1 = {};
+      function key(t) {
+        var d = new Date(t - 4 * 36e5);
+        return d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+      }
+      // daysAgo: the visit days with a catch (0 = today). stage: 1..7.
+      function seed(id, count, daysAgo, stage) {
+        var d = daysAgo.map(function (n) { return key(now - n * DAY); }).sort();
+        var first = now - Math.max.apply(null, daysAgo) * DAY, last = now - Math.min.apply(null, daysAgo) * DAY - 6e5;
+        v1[id] = { c: count, f: first, l: last, d: d };
+        v2[id] = { c: count, n: count, f: first, l: last, k: last, a: last, s: stage, d: d };
       }
       if (!q.get("empty")) {
-        seed("ogien", 7, [6, 3, 1]);       // golden
-        seed("noc", 6, [5, 2, 0]);         // golden
-        seed("iskra", 2, [1]);
-        seed("gitara", 1, [0]);
-        seed("kot", 3, [4, 0]);
-        seed("koc", 1, [2]);
-        seed("herbata", 5, [8, 4, 1]);     // golden
-        seed("chleb", 1, [0]);
-        seed("wiatr", 2, [3]);
-        seed("sowa", 1, [0]);
-        seed("spokoj", 1, [1]);
-        seed("tesknota", 2, [2, 0]);
-        seed("babcia", 1, [0]);
-        seed("dobranoc", 4, [3, 0]);
-        seed("tak", 3, [2, 1]);
-        seed("dziekuje", 1, [0]);
-        seed("unknown-id", 2, [1]);        // must be skipped by the journal
+        seed("ogien", 7, [6, 3, 1], 5);    // golden
+        seed("noc", 6, [5, 2, 0], 5);      // golden, caught tonight
+        seed("iskra", 2, [1], 2);
+        seed("gitara", 1, [0], 1);         // tonight
+        seed("kot", 3, [4, 0], 3);         // tonight
+        seed("koc", 1, [2], 1);
+        seed("herbata", 5, [8, 4, 1], 4);  // golden
+        seed("chleb", 1, [0], 1);          // tonight
+        seed("wiatr", 2, [3], 2);
+        seed("sowa", 1, [0], 1);           // tonight
+        seed("spokoj", 1, [1], 1);
+        seed("tesknota", 2, [2, 0], 2);    // tonight
+        seed("babcia", 1, [0], 1);         // tonight
+        seed("dobranoc", 4, [3, 0], 3);    // tonight
+        seed("tak", 3, [2, 1], 3);
+        seed("dziekuje", 1, [0], 1);       // tonight
+        seed("unknown-id", 2, [1], 1);     // must be skipped by the journal
+        v2.kotek = { c: 2, n: 0, f: now - 6e5, l: now - 6e5, k: 0, a: 0, s: 0, d: [] };   // chip only: not listed
       }
-      try { localStorage.setItem(KEY, JSON.stringify({ v: 1, words: words })); } catch (e) {}
+      try {
+        localStorage.removeItem(V2);
+        localStorage.removeItem(V1);
+        if (q.get("v1")) localStorage.setItem(V1, JSON.stringify({ v: 1, words: v1 }));
+        else localStorage.setItem(V2, JSON.stringify({ v: 2, words: v2 }));
+        if (q.get("mist")) localStorage.setItem("iskry.journal.v1", "mist");
+        else localStorage.removeItem("iskry.journal.v1");
+      } catch (e) {}
     })();
   </script>
 </head>
 <body>
-  <div id="hud">journal · ?empty=1 · ?open=1 · <button type="button" id="catch">catch a random word</button></div>
+  <div id="hud">journal · ?empty=1 · ?open=1 · ?mist=1 · ?v1=1 · <button type="button" id="catch">catch a random word</button></div>
   <div class="fake-fire" aria-hidden="true"></div>
   <span class="fake-word" style="left: 18vw; top: 30vh; font-size: 2.4rem">ogień</span>
   <span class="fake-word" style="left: 46vw; top: 44vh; font-size: 1.6rem; opacity: .8">gwiazda</span>
@@ -67,6 +80,7 @@
 
   <script src="../data/words.js"></script>
   <script src="../js/memory.js"></script>
+  <script src="../js/card.js"></script><!-- only for Iskry.card.mark (the word in its example); the card is not started -->
   <script src="../js/journal.js"></script>
   <script>
     window.__errors = [];

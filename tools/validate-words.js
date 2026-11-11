@@ -33,6 +33,10 @@
     - example.pl or example.en does not start with an uppercase letter or does not end
       with . ! ? or …
     - pl: more than 3 words (schema header of words.js).
+    - example.pl: the card cannot find the word in it. The check is the card's own
+      matcher, Iskry.card.mark.form from js/card.js (loaded the same way as words.js), so
+      what passes here is exactly what the card will highlight: the dictionary form or
+      the same beginning with another ending (ogień / ognia, gitara / gitarze).
     - Unknown extra field on an entry or on example (director's decision: the schema is
       closed, so a stray or misspelled field fails).
 
@@ -42,8 +46,10 @@
     - Syllable count of the respelling differs from the number of vowel groups in pl
       (a, ą, e, ę, i, o, ó, u, y; "i" before another vowel only softens and does not
       count).
-    - example.pl does not contain the first 3 letters of pl, case-insensitively
-      (the word may be inflected). Diacritics are ignored on both sides.
+    - respelling: breaks the guide at the top of words.js in a way that can be checked:
+      a "c" that is not part of "ch" (c is written "ts"), a "q" or an "x", or a word that
+      ends in a voiced sound although Polish devoices the end of a word
+      (chleb → KHLEP, not KHLEB).
     - example.pl is longer than 8 words.
     - A theme has no words; more than 15% of words are rare.
     - Fewer words than --words-max in css/tokens.css (the sky cannot fill without repeats).
@@ -60,6 +66,7 @@ const vm = require("vm");
 const ROOT = path.resolve(__dirname, "..");
 const DEFAULT_FILE = path.join(ROOT, "data", "words.js");
 const TOKENS_FILE = path.join(ROOT, "css", "tokens.css");
+const CARD_FILE = path.join(ROOT, "js", "card.js");
 
 // Theme enum. Copied from the schema header of data/words.js (the "theme" line) and from
 // CONTRACT.md, "Words" section. Keep all three in sync.
@@ -113,6 +120,23 @@ function loadWords(file) {
   };
 }
 
+// The card's own matchers (Iskry.card.mark), so the validator and the card agree on
+// what can be highlighted. card.js only touches the DOM inside init(), which is not called.
+let mark = null;
+function loadMark() {
+  try {
+    const sandbox = { window: {} };
+    vm.runInNewContext(fs.readFileSync(CARD_FILE, "utf8"), sandbox, { filename: CARD_FILE, timeout: 5000 });
+    const m = sandbox.window.Iskry && sandbox.window.Iskry.card && sandbox.window.Iskry.card.mark;
+    if (m && typeof m.form === "function" && typeof m.gloss === "function") return m;
+    warn("(all)", "example", "js/card.js has no Iskry.card.mark; the highlight check was skipped");
+  } catch (e) {
+    warn("(all)", "example", `cannot load js/card.js (${(e && e.message) || e}); the highlight check was skipped`);
+  }
+  return null;
+}
+const hits = { pl: 0, en: 0, examples: 0 };
+
 // Text field: non-empty string, no outer or double spaces, no mojibake.
 function checkText(who, field, v) {
   if (typeof v !== "string") { err(who, field, `must be a string, got ${typeName(v)}`); return false; }
@@ -164,6 +188,14 @@ function checkRespelling(who, resp, pl) {
         warn(who, "respelling", `"${w}" has ${syls.length} syllable(s) but "${plWords[wi]}" has ${vg} vowel group(s)`);
       }
     }
+    // The guide: c is "ts", cz is "ch"; there is no q or x.
+    const lower = w.toLowerCase();
+    if (/c(?!h)/.test(lower)) warn(who, "respelling", `"${w}" has a "c" that is not part of "ch"; the guide writes c as "ts"`);
+    if (/[qx]/.test(lower)) warn(who, "respelling", `"${w}" uses "q" or "x", which the guide never does`);
+    // Final devoicing: a word does not end in a voiced b, d, g, v, z, zh or j sound.
+    if (/(b|d|g|v|z|zh|j)$/.test(lower)) {
+      warn(who, "respelling", `"${w}" ends in a voiced sound; Polish devoices the end of a word (chleb → KHLEP)`);
+    }
   });
 }
 
@@ -185,13 +217,24 @@ function checkExample(who, ex, pl) {
     checkPolish(who, field, ex.pl);
     const n = ex.pl.trim().split(/\s+/).length;
     if (n > 8) warn(who, field, `${n} words; keep it to 8 or fewer`);
-    if (typeof pl === "string" && pl.trim()) {
-      const stem = fold(pl).replace(/[^a-z]/g, "").slice(0, 3);
-      if (stem && !fold(ex.pl).replace(/[^a-z]/g, "").includes(stem)) {
-        warn(who, field, `does not contain "${stem}" (first letters of pl "${pl}"); wrong word or unusual inflection?`);
+    if (typeof pl === "string" && pl.trim() && mark) {
+      hits.examples += 1;
+      const at = mark.form(pl, ex.pl);
+      if (!at) {
+        err(who, field, `the card cannot find "${pl}" in ${JSON.stringify(ex.pl)}; use the dictionary form or a form with the same beginning`);
+      } else {
+        hits.pl += 1;
       }
     }
   }
+}
+
+// How many English examples show the gloss (the card marks it there too). Not a rule:
+// "We are very lucky." for szczęście is good English.
+function countGloss(e) {
+  if (!mark || !isObject(e) || !isObject(e.example)) return;
+  if (typeof e.en !== "string" || typeof e.example.en !== "string") return;
+  if (mark.gloss(e.en, e.example.en)) hits.en += 1;
 }
 
 function checkEntry(e, i, byId, idCount) {
@@ -239,6 +282,7 @@ function checkEntry(e, i, byId, idCount) {
 
   // example
   if (e.example !== undefined) checkExample(who, e.example, e.pl);
+  countGloss(e);
 
   // theme
   if (e.theme !== undefined && !THEMES.includes(e.theme)) {
@@ -334,6 +378,10 @@ function report(shown, stats) {
     if (stats.invalidTheme) lines.push(`    (invalid theme): ${stats.invalidTheme}`);
     lines.push(`  rare: ${stats.rare}`);
     lines.push(`  with families: ${stats.withFamily}`);
+    if (mark) {
+      lines.push(`  word highlighted in its example: ${hits.pl} of ${hits.examples}`);
+      lines.push(`  meaning highlighted in the English example: ${hits.en} of ${hits.examples}`);
+    }
   }
   lines.push("", `RESULT: ${errors.length ? "FAIL" : "OK"} (${errors.length} error(s), ${warnings.length} warning(s))`);
   console.log(lines.join("\n"));
@@ -357,6 +405,7 @@ function main() {
 
   let stats = null;
   const { words } = loaded;
+  mark = loadMark();
   if (!loaded.utf8) err("(file)", "encoding", "file is not valid UTF-8");
   if (words === undefined) err("(file)", "WORDS", "Iskry.WORDS is missing");
   else if (!Array.isArray(words)) err("(file)", "WORDS", `must be an array, got ${typeName(words)}`);

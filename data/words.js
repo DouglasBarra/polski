@@ -27,6 +27,11 @@
     example     object { pl, en }. One short, natural sentence (about 3 to 7 words) that
                 contains the word, possibly inflected, and its English translation. Each
                 starts with a capital and ends with punctuation.
+                The card highlights the word inside its example, so the form must be one
+                a beginner (and Iskry.card.mark.form) can recognise: the dictionary form
+                where that is natural, otherwise the same beginning with another ending
+                (ogień / ognia, gitara / gitarze). The validator fails an example whose
+                form cannot be found. A saying is fine when the English explains it.
     theme       string. Exactly one of:
                   "fire-night"   fire, night, sky, light, warmth, music
                   "home"         house, rooms, objects, pets
@@ -370,7 +375,7 @@ window.Iskry.WORDS = [
     example: { pl: "Nad rzeką wisi mgła.", en: "Mist hangs over the river." },
     theme: "nature", family: [], rare: false },
   { id: "snieg", pl: "śnieg", en: "snow", respelling: "SHNYEK",
-    example: { pl: "Śnieg pada całą noc.", en: "It snows all night." },
+    example: { pl: "Śnieg pada całą noc.", en: "Snow falls all night." },
     theme: "nature", family: [], rare: false },
   { id: "mroz", pl: "mróz", en: "frost", respelling: "MROOS",
     example: { pl: "W nocy był mróz.", en: "There was frost in the night." },
@@ -391,7 +396,7 @@ window.Iskry.WORDS = [
     example: { pl: "Zima w tym roku jest długa.", en: "Winter is long this year." },
     theme: "nature", family: ["zimno"], rare: false },
   { id: "babie-lato", pl: "babie lato", en: "warm days in early autumn; gossamer drifting in the air", respelling: "BAH-byeh LAH-toh",
-    example: { pl: "We wrześniu przyszło babie lato.", en: "Indian summer came in September." },
+    example: { pl: "We wrześniu przyszło babie lato.", en: "The warm autumn days came in September." },
     theme: "nature", family: ["lato"], rare: true },
   { id: "ptak", pl: "ptak", en: "bird", respelling: "PTAHK",
     example: { pl: "Ptak śpiewa na drzewie.", en: "A bird is singing in the tree." },
@@ -474,7 +479,7 @@ window.Iskry.WORDS = [
     example: { pl: "Dlaczego jesteś smutny?", en: "Why are you sad?" },
     theme: "feelings", family: ["smutek"], rare: false },
   { id: "strach", pl: "strach", en: "fear", respelling: "STRAHKH",
-    example: { pl: "Strach ma wielkie oczy.", en: "Fear has big eyes." },
+    example: { pl: "Strach ma wielkie oczy.", en: "Fear has big eyes: things look worse when you are afraid." },
     theme: "feelings", family: [], rare: false },
   { id: "zmeczony", pl: "zmęczony", en: "tired", respelling: "zmen-CHOH-nih",
     example: { pl: "Po spacerze jestem zmęczony.", en: "I am tired after the walk." },
@@ -482,7 +487,7 @@ window.Iskry.WORDS = [
   { id: "glodny", pl: "głodny", en: "hungry", respelling: "GWOD-nih",
     example: { pl: "Czy jesteś głodny?", en: "Are you hungry?" },
     theme: "feelings", family: [], rare: false },
-  { id: "zaduma", pl: "zaduma", en: "quiet, thoughtful reverie", respelling: "zah-DOO-mah",
+  { id: "zaduma", pl: "zaduma", en: "a quiet, thoughtful mood", respelling: "zah-DOO-mah",
     example: { pl: "Patrzę w ogień w zadumie.", en: "I gaze into the fire, lost in thought." },
     theme: "feelings", family: [], rare: true },
   { id: "blogosc", pl: "błogość", en: "bliss; deep, drowsy contentment", respelling: "BWOH-goshch",
@@ -530,7 +535,7 @@ window.Iskry.WORDS = [
     example: { pl: "Nasz sąsiad ma dużego psa.", en: "Our neighbor has a big dog." },
     theme: "people", family: [], rare: false },
   { id: "gosc", pl: "gość", en: "guest", respelling: "GOSHCH",
-    example: { pl: "Gość w dom, Bóg w dom.", en: "A guest in the home is God in the home." },
+    example: { pl: "Gość w dom, Bóg w dom.", en: "A guest in the house is God in the house: an old saying of welcome." },
     theme: "people", family: [], rare: false },
   { id: "przytulac", pl: "przytulać", en: "to hug; to cuddle", respelling: "pshih-TOO-lahch",
     example: { pl: "Mama przytula dziecko.", en: "Mom is hugging the child." },

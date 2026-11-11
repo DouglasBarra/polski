@@ -12,7 +12,26 @@
       starts (Esc, backdrop click or the close button). The id is the one from the catch,
       even after the card has switched to a related word.
     - Related words re-render the same card in place (crossfade, no event, no movement).
-    - Calls Iskry.memory.record(id) on every word shown.
+    - Calls Iskry.memory.record(id, { via }) on every word shown: via "catch" for the
+      word that was caught, via "related" for a word opened from a related-word chip (a
+      light touch that does not move the word's schedule).
+    - Helps the eye (markup only; the CARD section of css/main.css styles it):
+        span.card__example-hit       around the caught word's form in .card__example-pl
+                                     ("ogień" finds "ognia"), and around its English gloss
+                                     in .card__example-en when the gloss is there. When
+                                     nothing can be found for sure, nothing is marked.
+                                     The English example is not marked while it is veiled.
+        span.card__respelling-stress around each stressed (CAPS) syllable in
+                                     .card__respelling. The text itself is unchanged.
+        p.card__met                  last child of .card__content, data-familiarity=
+                                     "new|returning|golden": "new tonight", "you've met
+                                     this one before", "an old friend". Words only.
+        .card.is-golden              the shown word is golden.
+        .card__family-item.is-met / .is-golden   a related word caught before / golden
+                                     (plus a visually hidden ", met before" or ", an old
+                                     friend" for screen readers).
+      Iskry.card.mark = { form(pl, sentence), gloss(en, sentence), stress(respelling) }
+      are the pure functions behind this; tools/validate-words.js uses them too.
     - "Remember?" (Phase 2): for every showing (open and each related-word switch) it asks
       Iskry.memory.hideTranslation(id) once, BEFORE record(id). When true on an open (a
       related-word switch never veils: its English was just on the chip), the Polish word,
@@ -65,6 +84,14 @@ window.Iskry = window.Iskry || {};
 
   var veiled = false;       // the English of the shown word is under the veil
   var veilTimer = 0;
+
+  var MET_TEXT = {
+    "new": "new tonight",
+    "returning": "you've met this one before",
+    "golden": "an old friend"
+  };
+  var CHIP_MET_TEXT = ", met before";
+  var CHIP_GOLDEN_TEXT = ", an old friend";
 
   /* ---------- small helpers ---------- */
 
@@ -121,6 +148,183 @@ window.Iskry = window.Iskry || {};
       if (typeof all[i] !== "number" || !isFinite(all[i])) return null;
     }
     return { left: left, top: top, right: right, bottom: bottom };
+  }
+
+  /* ---------- finding the word in its example ---------- */
+
+  var PL_FOLD = { "ą": "a", "ć": "c", "ę": "e", "ł": "l", "ń": "n", "ó": "o", "ś": "s", "ź": "z", "ż": "z" };
+  var VOWELS = "aeiouy";
+
+  // Lowercase ascii form of Polish text. One character in, one character out, so
+  // positions in the folded text are positions in the original.
+  function fold(text) {
+    var out = "";
+    for (var i = 0; i < text.length; i++) {
+      var ch = text.charAt(i).toLowerCase();
+      if (ch.length !== 1) ch = text.charAt(i);
+      out += hasOwn.call(PL_FOLD, ch) ? PL_FOLD[ch] : ch;
+    }
+    return out;
+  }
+
+  function tokens(sentence) {
+    var list = [];
+    var re = /[a-z]+/g;
+    var folded = fold(sentence);
+    var m;
+    while ((m = re.exec(folded))) list.push({ text: m[0], start: m.index, end: m.index + m[0].length });
+    return list;
+  }
+
+  function commonPrefix(a, b) {
+    var n = Math.min(a.length, b.length);
+    var i = 0;
+    while (i < n && a.charAt(i) === b.charAt(i)) i++;
+    return i;
+  }
+
+  // The stem of a word that loses its last "e" when it takes an ending:
+  // ogień -> ogn(ia), domek -> domk(u), sweter -> swetr(a). "" when there is none.
+  function fleetingStem(word) {
+    var n = word.length;
+    if (n < 4 || VOWELS.indexOf(word.charAt(n - 1)) >= 0 || word.charAt(n - 2) !== "e") return "";
+    var head = word.slice(0, n - 2);
+    if (head.charAt(head.length - 1) === "i") head = head.slice(0, -1);
+    if (!head || VOWELS.indexOf(head.charAt(head.length - 1)) >= 0) return "";
+    var stem = head + word.charAt(n - 1);
+    return stem.length >= 3 ? stem : "";
+  }
+
+  // How well a token of the sentence fits a dictionary word (both folded). 0: not at all.
+  // Polish changes the end of a word, so a form shares the word's beginning: all of it
+  // but the last letter or two (gitara / gitarze, marzyć / marzę), followed by a short
+  // ending. Words of one or two letters must match exactly.
+  function fit(token, word) {
+    if (token === word) return 1000 + word.length;
+    var n = word.length;
+    if (n < 3) return 0;
+    var best = 0;
+    var shared = commonPrefix(token, word);
+    var tail = token.length - shared;
+    var dropped = n - shared;
+    if (shared >= Math.max(3, n - 2) && dropped <= 2 && tail <= (n <= 3 ? 2 : 4)) {
+      best = shared * 10 - tail - dropped;
+    }
+    var stem = fleetingStem(word);
+    if (stem && token.indexOf(stem) === 0 && token.length - stem.length <= 3) {
+      best = Math.max(best, stem.length * 10 - (token.length - stem.length) - 1);
+    }
+    return best;
+  }
+
+  // Where the word (or phrase) `pl` stands in `sentence`, possibly inflected.
+  // Returns [start, end) in the sentence's own characters, or null when unsure.
+  function findForm(pl, sentence) {
+    pl = str(pl);
+    sentence = str(sentence);
+    var want = tokens(pl);
+    var have = tokens(sentence);
+    if (!want.length || !have.length) return null;
+    var best = null;
+    var bestScore = 0;
+    for (var i = 0; i + want.length <= have.length; i++) {
+      var score = 0;
+      for (var j = 0; j < want.length; j++) {
+        var s = fit(have[i + j].text, want[j].text);
+        // The words of a phrase must stand next to each other.
+        if (!s || (j > 0 && !/^\s+$/.test(sentence.slice(have[i + j - 1].end, have[i + j].start)))) { score = 0; break; }
+        score += s;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        best = [have[i].start, have[i + want.length - 1].end];
+      }
+    }
+    return best;
+  }
+
+  function escapeRe(text) {
+    return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+  }
+
+  // English forms a plain gloss may take in a sentence: sing / sings, hug / hugging,
+  // shine / shining, berry / berries. Irregular forms are simply not found.
+  function englishForms(sense) {
+    var forms = [sense, sense + "s", sense + "es", sense + "ing", sense + "ed", sense + "d"];
+    var last = sense.charAt(sense.length - 1);
+    var stem = sense.slice(0, -1);
+    if (last === "e") forms.push(stem + "ing");
+    if (last === "y") forms.push(stem + "ies", stem + "ied");
+    if (/[bdgmnprt]/.test(last)) forms.push(sense + last + "ing", sense + last + "ed");
+    return forms;
+  }
+
+  // Where the English meaning `en` ("to sing", "fog; mist") stands in `sentence`.
+  // Every sense is tried and the longest find wins ("very much" over "very"); a long
+  // definition is never searched for. Returns [start, end) or null.
+  function findGloss(en, sentence) {
+    en = str(en);
+    sentence = str(sentence);
+    var senses = en.split(";");
+    var best = null;
+    for (var i = 0; i < senses.length; i++) {
+      var full = senses[i].replace(/\([^)]*\)/g, " ").replace(/\s+/g, " ").trim().toLowerCase();
+      if (!full || full.split(" ").length > 3) continue;
+      var bare = full.replace(/^(to|a|an|the) /, "");
+      var tries = bare !== full ? [full, bare] : [full];
+      for (var t = 0; t < tries.length; t++) {
+        if (tries[t].length < 2) continue;
+        var forms = englishForms(tries[t]);
+        var alt = [];
+        for (var f = 0; f < forms.length; f++) alt.push(escapeRe(forms[f]));
+        alt.sort(function (a, b) { return b.length - a.length; });
+        var m = new RegExp("(^|[^a-z])(" + alt.join("|") + ")(?![a-z])", "i").exec(sentence);
+        if (m) {
+          var start = m.index + m[1].length;
+          if (!best || m[2].length > best[1] - best[0]) best = [start, start + m[2].length];
+          break; // the full sense was found: no need for the bare one
+        }
+      }
+    }
+    return best;
+  }
+
+  // "OH-gyen" -> [{ text: "OH", stress: true }, { text: "-gyen", stress: false }].
+  // The pieces joined are exactly the respelling.
+  function stressParts(respelling) {
+    var parts = [];
+    var re = /[A-Za-z]+|[^A-Za-z]+/g;
+    var text = str(respelling);
+    var m;
+    while ((m = re.exec(text))) {
+      var stress = /^[A-Z]+$/.test(m[0]);
+      var prev = parts[parts.length - 1];
+      if (prev && !stress && !prev.stress) prev.text += m[0];
+      else parts.push({ text: m[0], stress: stress });
+    }
+    return parts;
+  }
+
+  // Put `text` into `node`, with [start, end) wrapped in <span class=cls>.
+  function setMarked(node, text, range, cls) {
+    node.textContent = "";
+    if (!range || !(range[0] >= 0) || !(range[1] > range[0]) || range[1] > text.length) {
+      node.textContent = text;
+      return;
+    }
+    if (range[0] > 0) node.appendChild(document.createTextNode(text.slice(0, range[0])));
+    node.appendChild(el("span", cls, text.slice(range[0], range[1])));
+    if (range[1] < text.length) node.appendChild(document.createTextNode(text.slice(range[1])));
+  }
+
+  /* ---------- what memory knows (never shown as a number) ---------- */
+
+  function memoryCall(name, id, fallback) {
+    try {
+      var m = Iskry.memory;
+      if (m && typeof m[name] === "function") return m[name](id);
+    } catch (err) { /* memory must never break the card */ }
+    return fallback;
   }
 
   /* ---------- DOM ---------- */
@@ -196,7 +400,12 @@ window.Iskry = window.Iskry || {};
     content.appendChild(respelling);
     content.appendChild(sense);
     content.appendChild(example);
+    // A quiet line about how well you know this word. Words only, never a number.
+    var met = el("p", "card__met");
+    met.setAttribute("aria-live", "off");
+
     content.appendChild(family);
+    content.appendChild(met);
 
     card.appendChild(close);
     card.appendChild(content);
@@ -208,7 +417,8 @@ window.Iskry = window.Iskry || {};
       backdrop: backdrop, card: card, close: close, content: content, rare: rare,
       word: word, respelling: respelling, sense: sense, meaning: meaning, veil: veil,
       meaningGhost: meaningGhost, example: example, examplePl: examplePl,
-      exampleEn: exampleEn, exampleEnWrap: exampleEnWrap, exampleGhost: exampleGhost, family: family, familyList: familyList
+      exampleEn: exampleEn, exampleEnWrap: exampleEnWrap, exampleGhost: exampleGhost, family: family, familyList: familyList,
+      met: met
     };
   }
 
@@ -225,6 +435,11 @@ window.Iskry = window.Iskry || {};
       btn.appendChild(el("span", "visually-hidden", ", "));
       btn.appendChild(el("span", "card__family-en", str(fw.en)));
     }
+    var isGold = memoryCall("isGolden", fw.id, false) === true;
+    var isMet = isGold || memoryCall("isMet", fw.id, false) === true;
+    btn.classList.toggle("is-met", isMet);
+    btn.classList.toggle("is-golden", isGold);
+    if (isMet) btn.appendChild(el("span", "visually-hidden", isGold ? CHIP_GOLDEN_TEXT : CHIP_MET_TEXT));
     li.appendChild(btn);
     return li;
   }
@@ -278,20 +493,34 @@ window.Iskry = window.Iskry || {};
   }
 
   // Fill the card with one word. Never touches position or state.
-  function render(word, hideEnglish) {
+  // familiarity: "new" | "returning" | "golden", from memory.
+  function render(word, hideEnglish, familiarity) {
     var isRare = !!word.rare;
     els.card.classList.toggle("is-rare", isRare);
     els.rare.hidden = !isRare;
 
+    if (!hasOwn.call(MET_TEXT, familiarity)) familiarity = "new";
+    els.card.classList.toggle("is-golden", familiarity === "golden");
+    els.met.textContent = MET_TEXT[familiarity];
+    els.met.setAttribute("data-familiarity", familiarity);
+
     els.word.textContent = str(word.pl);
-    els.respelling.textContent = str(word.respelling);
+    els.respelling.textContent = "";
+    var parts = stressParts(word.respelling);
+    for (var p = 0; p < parts.length; p++) {
+      els.respelling.appendChild(parts[p].stress
+        ? el("span", "card__respelling-stress", parts[p].text)
+        : document.createTextNode(parts[p].text));
+    }
     els.respelling.hidden = !str(word.respelling);
     els.meaning.textContent = str(word.en);
     els.sense.hidden = !str(word.en);
 
     var ex = word.example || {};
-    els.examplePl.textContent = str(ex.pl);
-    els.exampleEn.textContent = str(ex.en);
+    var willVeil = !!hideEnglish && !!str(word.en);
+    setMarked(els.examplePl, str(ex.pl), findForm(word.pl, ex.pl), "card__example-hit");
+    // Under the veil the English example stays plain: a marked word would show through.
+    setMarked(els.exampleEn, str(ex.en), willVeil ? null : findGloss(word.en, ex.en), "card__example-hit");
     els.exampleEnWrap.hidden = !str(ex.en);
     els.example.hidden = !str(ex.pl);
 
@@ -307,7 +536,7 @@ window.Iskry = window.Iskry || {};
     els.family.hidden = els.familyList.childNodes.length === 0;
 
     // Only veil when there is a meaning to remember.
-    var veil = !!hideEnglish && !!str(word.en);
+    var veil = willVeil;
     els.meaningGhost.textContent = veil ? str(word.en) : "";
     els.exampleGhost.textContent = veil ? str(ex.en) : "";
     setVeil(veil);
@@ -327,10 +556,17 @@ window.Iskry = window.Iskry || {};
         hideEnglish = Iskry.memory.hideTranslation(id) === true;
       }
     } catch (err) { hideEnglish = false; }
-    render(words[id], hideEnglish && !fromSwitch);
+    // How well the word was known before this showing...
+    var familiarity = memoryCall("familiarity", id, "new");
+    // A catch moves the word's schedule; a related-word view is only a light touch.
     try {
-      if (Iskry.memory && typeof Iskry.memory.record === "function") Iskry.memory.record(id);
+      if (Iskry.memory && typeof Iskry.memory.record === "function") {
+        Iskry.memory.record(id, { via: fromSwitch ? "related" : "catch" });
+      }
     } catch (err) { /* memory must never break the card */ }
+    // ...except that the catch that turns it golden shows it golden at once, like the sky.
+    if (memoryCall("isGolden", id, false) === true) familiarity = "golden";
+    render(words[id], hideEnglish && !fromSwitch, familiarity);
   }
 
   /* ---------- position ---------- */
@@ -576,6 +812,9 @@ window.Iskry = window.Iskry || {};
   /* ---------- init ---------- */
 
   Iskry.card = {
+    // Pure helpers, shared with tools/validate-words.js (no DOM needed).
+    mark: { form: findForm, gloss: findGloss, stress: stressParts },
+
     init: function (rootEl, wordsById) {
       if (!rootEl || root) return;
       root = rootEl;
