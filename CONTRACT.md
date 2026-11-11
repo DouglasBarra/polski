@@ -1,4 +1,4 @@
-# Iskry: contract (Phase 1b)
+# Iskry: contract (Phase 3)
 
 Single source of truth. If a file header disagrees with this document, this document wins.
 
@@ -16,46 +16,56 @@ Iskry ("sparks") is a place to meet Polish words for pleasure. No lessons, level
 
 | File | Owner |
 |---|---|
-| `index.html`, `css/tokens.css`, `css/main.css` BASE and SCENE sections, `js/memory.js`, `js/scene.js`, `vendor/`, `README.md`, `CONTRACT.md` | director |
-| `js/scene/fire.js`, `js/scene/strings.js`, `js/scene/sky.js`, each with its test page `dev/<name>.html` | one environment agent each |
+| `index.html`, `css/tokens.css`, `css/main.css` BASE and SCENE sections, `js/scene.js`, `vendor/`, `README.md`, `CONTRACT.md` | director |
+| `js/scene/sky.js`, `stars.js` (+ its star catalogue), `moon.js`, `trees.js`, `foreground.js`, `strings.js`, `fire.js`, each with its test page `dev/<name>.html` | one environment agent each (sky, stars, moon, trees, foreground, strings, fire) |
+| `js/memory.js`, `js/journal.js`, `css/journal.css`, `dev/journal.html`, `tests/` | memory agent |
 | `js/card.js`, `css/main.css` CARD section | card agent |
 | `data/words.js` | words agent |
 | `tools/validate-words.js` | QA agent |
 
 ## Boot
 
-Order: `data/words.js`, `js/memory.js`, `js/card.js` (classic), then the inline module in `index.html`:
+Order: `data/words.js`, `js/memory.js`, `js/card.js`, `js/journal.js` (classic), then the inline module in `index.html`:
 
 ```js
 import { init as initScene } from "./js/scene.js";
-Iskry.card.init(document.getElementById("card-root"), wordsById); // { [id]: word }
-initScene(document.getElementById("scene"), Iskry.WORDS);         // array
+Iskry.card.init(document.getElementById("card-root"), wordsById);                    // { [id]: word }
+if (Iskry.journal) Iskry.journal.init(document.getElementById("journal-root"), wordsById);
+initScene(document.getElementById("scene"), Iskry.WORDS);                            // array
 ```
 
-`init` is called once. Scene and card never call each other; they talk only through the two events below.
+Each `init` is called once. Scene, card and journal never call each other; they talk only through the events below. `css/journal.css` loads after `css/main.css`.
 
 ## The scene
 
 One `THREE.Scene` and one `PerspectiveCamera`, drawn by two renderers that share them, in one `requestAnimationFrame` loop (paused while the tab is hidden):
 
-- `WebGLRenderer` into `#scene-world`: the night (sky, fire, strings). Transparent, so the CSS night gradient on `body` shows until the sky draws, and if WebGL is unavailable.
+- `WebGLRenderer` into `#scene-world`: the night (sky, stars, moon, trees, foreground, strings, fire). Transparent, so the CSS night gradient on `body` shows until the sky draws, and if WebGL is unavailable.
 - `CSS3DRenderer` into `#scene-words`: the words, as real DOM buttons wrapped in `CSS3DSprite`s. Each sprite is scaled so the text is drawn 1:1 (the button's `font-size` is the size on screen), which keeps it crisp. Words are always drawn above the canvas.
 
-World: metres, ground at y = 0. The camera sits at (0, 1.6, 12), looks toward -z pitched up about 6.5°, and only ever translates (pointer parallax and slow breathing, at most about 0.3 m; frozen while a word is held).
+World: metres, ground at y = 0. The fire is at (-3, 0, -2), scale 1.3: the focal point, left of centre. The words' band (8% to 62% of the height) must stay legible: nothing bright or busy behind it. The camera sits at (0, 1.6, 12), looks toward -z pitched up about 6.5° (the compass direction of -z is set by the stars module; see below), and only ever translates (pointer parallax and slow breathing, at most about 0.3 m; frozen while a word is held).
 
 **Drift.** Words ride one wind along +x (left to right; `--wind-direction: -1` reverses it) at depths from `--depth-near` to `--depth-far`. The wind is the same everywhere, so near words are larger, brighter and faster and far words smaller, dimmer, slower and tinted toward the fog: real parallax. The wind strength wanders (`--wind-gust`), each word bobs gently (`--bob-*`), and words fade in and out over `--fade-edge` of the width at the edges. Left to right was chosen because it is the reading direction: the eye follows without effort, and it does not read as a news ticker.
 
-**Environment modules** (`js/scene/fire.js`, `strings.js`, `sky.js`). Each exports one factory, `createFire|createStrings|createSky(ctx, opts) -> handle`:
+**Environment modules** (`js/scene/<name>.js`). Each exports one factory, `create<Name>(ctx, opts) -> handle`:
 
 ```js
 ctx    = { scene, camera, renderer, reducedMotion, readToken(name, fallback) }
 handle = { group, update(timeSec, dtSec), resize(width, height), dispose() }
-fire    opts { position, scale }   + { light, intensity() }            // flicker 0..1
-strings opts { count, extents }    + { touch(prevPos, pos), pluckNearest(worldPos, strength), nearestPoint(worldPos) }
-sky     opts { horizonY, radius }  + { fogColor, fogNear, fogFar }     // suggestions
+sky        opts { horizonY, radius }                       + { fogColor, fogNear, fogFar }   // suggestions
+stars      opts { date, latitudeDeg, longitudeDeg }                                         // the real sky over Poland tonight
+moon       opts { date }                                   + { direction, phase, illumination }
+trees      opts { firePosition, wind, seed }               (also exports buildDouglasFir, buildBirch)
+foreground opts { firePosition, wind }
+strings    opts { count, extents }                         + { touch(prevPos, pos), pluckNearest(worldPos, strength), nearestPoint(worldPos) }
+fire       opts { position, scale }                        + { light, intensity() }          // flicker 0..1
 ```
 
-The core loads each with a guarded dynamic `import()`: a missing or throwing module is logged and skipped and the words drift on. Modules have no global side effects (no `scene.fog`, background or renderer settings) and make no per-frame allocations. The core calls `update` every frame, `strings.touch(prev, pos)` for every drifting word, `strings.pluckNearest` on a pluck, applies the sky's fog to `scene.fog` and to `--scene-fog` (the far words' tint), and lets `fire.intensity()` breathe on the words near the fire. Modules are rebuilt when reduced motion changes. `?bare=1` skips them.
+`wind` is the mean wind in m/s along +x. The place is central Poland (52.1° N, 19.4° E); `date` is the visitor's clock at load.
+
+Who draws what: `sky` the dome, haze, distant land (hills, the Tatras in the haze, a village) and fog; `stars` the stars and the Milky Way; `moon` the moon; `trees` **every tree**: the Douglas-fir treeline about 50 to 56 m out with a dip behind the fire, the side stands at 15 to 35 m and the birches (the sky and the foreground draw no trees); `foreground` the Polish countryside props within about 30 m (fence, wayside shrine, bench, grass, path), mostly low on the screen and at the edges, lit by `fire.light`; `strings` the guitar strings; `fire` the bonfire. Each module's frame budget is about 2 ms.
+
+The core loads the sky first, then all the others in parallel, each with a guarded dynamic `import()`: a missing or throwing module is logged and skipped and the words drift on. Modules have no global side effects (no `scene.fog`, background or renderer settings) and make no per-frame allocations. The core calls `update` every frame, `strings.touch(prev, pos)` for every drifting word, `strings.pluckNearest` on a pluck, applies the sky's fog to `scene.fog` and to `--scene-fog` (the far words' tint), and lets `fire.intensity()` breathe on the words near the fire. Modules are rebuilt when reduced motion changes. `?bare=1` skips them.
 
 ## DOM hooks
 
@@ -63,8 +73,11 @@ Scene (inside `#scene`; the scene adds children to these two layers only):
 
 - `#scene-world`: the WebGL canvas. `aria-hidden`.
 - `#scene-words`: the CSS3D layer with the words. Each word is `<button type="button" class="spark" data-id="{id}">{pl}</button>`.
-- Word state classes: `is-plucked` (vibrating), `is-caught` (held while its card is open), `is-rare` (`word.rare`), `is-golden` (`Iskry.memory.isGolden(id)`).
+- Word state classes: `is-plucked` (vibrating), `is-caught` (held while its card is open), `is-rare` (`word.rare`), `is-golden` (`Iskry.memory.isGolden(id)`, updated on `memory:change`), `is-hinted` (the word under the pointer while a card is open: one click switches to it).
+- `.scene__whisper` (inside `#scene-words`, `aria-hidden`): a gust's faint label.
 - `#scene[data-holding="true"]` while a word is caught.
+
+Journal (inside `#journal-root`; the memory agent builds everything in it): `.journal-toggle` (bottom right, `aria-expanded`, `aria-controls="journal-panel"`) and `aside#journal-panel.journal` titled "Caught sparks". Not modal. It sits one layer below the card (`--z-card` minus 1) and closes itself on `word:catch`.
 
 Card (inside `#card-root`; the card agent builds everything in it):
 
@@ -79,7 +92,8 @@ Card (inside `#card-root`; the card agent builds everything in it):
 - Fired when the pluck vibration **ends**, `--dur-pluck` after the click (immediately under reduced motion). Sequence: click, word freezes and gets `is-plucked`, vibration ends, word gets `is-caught`, event fires.
 - `rect` is the word button's `getBoundingClientRect()` taken at dispatch, at rest, in viewport coordinates.
 - The caught word stays held exactly where it is, bright, for as long as it is caught (the camera holds still too). The other words keep drifting.
-- Only one word is caught at a time. From click until `word:release` the scene ignores every other catch attempt (the backdrop also blocks pointer clicks).
+- Only one word is caught at a time. From click until `word:release` the scene ignores every other catch attempt.
+- **Switching.** While a card is open, a click on another word lands on the card's backdrop and closes the card as usual. The scene sees that click (capture phase on `document`), finds the word under it through the backdrop (`document.elementsFromPoint`; a word under the card itself does not count), and after the card's `word:release` plucks that word, which then sends its own `word:catch`. One click: the old card fades out while the new word vibrates, then the new card opens. The card needs no special handling (it already accepts a `word:catch` while closing).
 
 **`word:release`**, `detail: { id }`. Dispatched by the card.
 
@@ -93,6 +107,7 @@ Card (inside `#card-root`; the card agent builds everything in it):
 - On open: focus moves to `.card__close`; Tab stays inside the card.
 - Clicking a related word **re-renders the same card in place** with that word. No event goes to the scene, the card does not move, and the originally caught word stays held. Family ids missing from `wordsById` are skipped; an empty family hides `.card__family`.
 - A `word:catch` with an unknown id is ignored (no card, and the card dispatches `word:release` straight away so the scene is not stuck).
+- **"Remember?"** Every time a word is shown (on open and on every related-word switch) the card calls `Iskry.memory.hideTranslation(id)` once, before `record(id)`. Only on an open does a `true` result veil the word; after a related-word switch the answer is ignored and the word is never veiled, because its English was just visible on the chip. When veiled, the Polish word, respelling and Polish example show; the English meaning and English example are veiled (a blurred ghost copy; the real text is transparent and `aria-hidden`, with no `aria-describedby`). A `<button class="card__veil">` ("remember?", `aria-label="Remember? Show the meaning"`) covers the meaning and sits in the tab order after `.card__close`. A click, Enter or Space on it, or a click on the misted example, reveals both with an opacity crossfade (instant under reduced motion), and they stay revealed until the card shows another word or closes. On reveal, focus moves from the veil to `.card__meaning`. No judgement, ever.
 
 ## Keyboard
 
@@ -100,15 +115,32 @@ Card (inside `#card-root`; the card agent builds everything in it):
 - A keyboard-focused word (`:focus-visible`) behaves like a hovered one (slow and bright). Focus that follows a mouse close does not count, so the released word drifts on.
 - Esc closes the card. Focus goes back to the word.
 
-## Memory hooks
+**`memory:change`**, `detail: { id }`. Dispatched by memory after every `record(id)`; `id` is `null` after a change made in another tab. The scene refreshes `is-golden`; the journal re-renders.
 
-- Scene: calls `Iskry.memory.weight(id)` for each candidate when picking the next word to spawn (weighted random; higher is more likely), and `Iskry.memory.isGolden(id)` when creating a word element.
-- Card: calls `Iskry.memory.record(id)` every time a word is shown in the card, including a switch to a related word.
-- Phase 1: `weight` is 1, `record` only counts in memory, `isGolden` is false. Callers must not assume that.
+## Memory
+
+`js/memory.js` (memory agent), stored in `localStorage` under `iskry.memory.v1` (every access guarded; without storage it counts for this page only). A visit day starts at 04:00 local time, so a late night by the fire is one day. All calls are synchronous, never throw and accept unknown ids.
+
+- `weight(id)` -> number in about 0.5 to 2: 0.5 right after a word is seen, rising back to 2 over time, so old friends drift back. Never 0.
+- `record(id)`: "this word was looked at"; saves count, first and last seen, visit days; fires `memory:change`.
+- `isGolden(id)`: at least 5 views on at least 3 separate days. A quiet sign of familiarity, never a score.
+- `entries()` -> `[{ id, count, firstSeen, lastSeen, days, golden }]`, most recently seen first (a fresh copy).
+- `hideTranslation(id)` -> boolean: about 1 in 4, and only for a word first met on an earlier visit day (a gentle "do you remember?").
+- Nothing from memory is ever shown as a number.
+
+Callers:
+
+- Scene: `weight(id)` for each candidate when picking the next word to spawn, and for the words of a gust (weighted random; higher is more likely); `isGolden(id)` when creating a word element and on `memory:change`.
+- Card: `hideTranslation(id)` then `record(id)` every time a word is shown in the card, including a switch to a related word (see "Remember?" below).
+- Journal: `entries()` and `isGolden(id)`.
 
 ## Motion
 
 - Hover or focus slows a word to `--hover-slow-factor` of its speed and brightens it. A word that has your attention waits at the downwind edge instead of fading away.
+- When a nearer word passes in front of a farther one, the farther one fades back while it is covered (screen-space boxes, no layout reads). A word that has your attention, or is held, never fades back: the word in front of it does.
+- The warm air above the fire lifts a passing word a little (`TUNE.heat*`; none under reduced motion).
+- **Rare finds** (`word.rare`) are picked about 4 times less often, never two at once, ride the wind slower and carry a soft breathing halo.
+- **Gusts.** `Iskry.GUSTS = [{ id, label, ids }]` (words agent) are themed clusters. Rarely (the first after about 1.5 to 2.5 min, then every 3 to 5.5 min) one rides in: 4 to 6 of its free, non-rare words, picked by `weight`, enter from the upwind edge one by one, loosely grouped in depth and height, while the wind swells a little (no swell under reduced motion) and ordinary spawning waits. The label (English) drifts ahead of them as a faint `.scene__whisper`. A cluster needs at least 3 free words; absent or malformed `GUSTS` simply means no gusts. `?gust=1` starts one after 4 s (dev).
 - A pluck vibrates the word vertically (`--pluck-amplitude`, `--pluck-cycles`, `--dur-pluck`) and plucks the nearest string.
 - JS reads motion, depth, camera and density tokens with `getComputedStyle(document.documentElement)` at init and again when `(prefers-reduced-motion: reduce)` changes. Durations are in `ms`, speeds in px/s, depths in metres, the rest unitless.
 - Reduced motion: a slow steady drift, no bob, no gusts, no camera motion, no word vibration; the modules get `reducedMotion: true` (steady fire, few particles, still strings).
@@ -117,6 +149,8 @@ Card (inside `#card-root`; the card agent builds everything in it):
 ## Words
 
 Schema and respelling guide live at the top of `data/words.js`. Themes: `fire-night`, `home`, `food`, `nature`, `feelings`, `people`, `small-words`. Check with `node tools/validate-words.js`.
+
+`data/words.js` also defines `Iskry.GUSTS`, themed clusters for the scene: `{ id, label, ids }`, 5 to 8 ids each, never rare words; a word may be in more than one gust; `label` is short lowercase English ("by the fire").
 
 `family` means **related words** (the card labels it so). Two kinds only: words that share a root (`kot`/`kotek`, `noc`/`dobranoc`) and fixed conversational partners (`tak`/`nie`, `dziękuję`/`proszę`). Words that only share a topic are not family. Links are symmetric.
 
@@ -130,7 +164,7 @@ Scene:
 - JS sets per word: `font-size` in px (by depth, never below `--size-spark-min`), `opacity`, the CSS3D `transform`, and `--spark-fog` (0 near to 1 far).
 - Look-and-feel knobs that are not tokens live in `TUNE` at the top of `js/scene.js` (camera placement, the height band the words use, fire position, string extents).
 - Nothing in WebGL can occlude a word, and words are depth-sorted among themselves by the browser.
-- While a card is open, a click on another word lands on the backdrop and only closes the card (unchanged from Phase 1; undecided).
+- Words that drift under the open journal panel are cut at its edge (the panel is about 88% opaque, blurred).
 
 Card:
 
@@ -139,3 +173,4 @@ Card:
 - When the card fits on neither side of the word it goes below it, or above if there is more room there, centered on the word.
 - `#card-root` gets `data-anchored="true"` and `--spark-x/y/rx/ry` when opened from a `rect`; the backdrop uses them to leave a clearing around the held word. `.card` gets `--card-origin`.
 - A `word:catch` that arrives while a card is still closing ends that close at once and opens the new card.
+- Veil elements: `.card__sense` (wraps `.card__meaning`, the meaning ghost and `.card__veil`), `.card__example-en-wrap` (wraps `.card__example-en` and its ghost), `.card__ghost` (`aria-hidden`, blurred copy), `.card__veil-text`. `.card__meaning` has `tabindex="-1"`. `.card` gets `is-veiled` while veiled and `is-revealing` during the fade. Local token `--card-dur-reveal` on `.card-root` (read by `card.js`).

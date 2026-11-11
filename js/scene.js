@@ -45,7 +45,10 @@
     One requestAnimationFrame loop, paused while document.hidden. Tokens are read at init
     and when reduced motion changes (the environment modules are then rebuilt).
     Look-and-feel knobs that are not tokens live in TUNE below.
-    Dev only: ?bare=1 skips the environment modules, ?gust=1 sends the first gust after 4 s.
+    Time of day: modules may expose setTimeOfDay({ hour, dusk, night, dawn }) (weights sum
+    to 1, from the visitor's clock); it is called on load and every TUNE.timeEvery seconds.
+    Dev only: ?bare=1 skips the environment modules, ?gust=1 sends the first gust after 4 s,
+    ?hour=5.5 pins the clock.
 
   three.js 0.186.1 (r186), vendored in vendor/three/, resolved by the import map in index.html.
 */
@@ -90,6 +93,9 @@ const TUNE = {
   hoverHitEvery: 0.2,          // s, re-test what is under a still pointer while a card is open
   rareWeight: 0.25,            // rare finds are picked this much less often
   rareSlow: 0.72,              // and ride the wind this much slower
+  rareDepth: [0.08, 0.5],      // and drift in the nearer half, so they can be read
+  journalEase: 0.25,
+  timeEvery: 20,               // s between time-of-day updates (the night shifts over hours)           // s, how fast the open sky's edge follows the journal panel
   gustFirst: [80, 140],        // s, the first gust comes this long after opening
   gustEvery: [190, 330],       // s, then this long after the previous one ends
   gustWords: [4, 6],           // words in one gust
@@ -127,6 +133,10 @@ let holding = null;          // the word from click until word:release
 let pluckTimer = 0;
 let resizeQueued = false;
 let rareOnScreen = 0;
+
+// The right edge of the open sky, in px: the viewport edge, or the journal panel's edge
+// while it is open (words fade out before they slip under it). Eased.
+let skyEdge = 1, skyEdgeGoal = 1, journalPanel = null;
 
 // While a card is open: the word under the pointer (a hint), and a click's target.
 let ghost = null, hitDirty = false, hitAt = 0;
@@ -255,6 +265,8 @@ function measure() {
     gl.setSize(W, H, false);
   }
   css.setSize(W, H);
+  readJournalEdge();
+  if (!(skyEdge > 1)) skyEdge = skyEdgeGoal;
   for (const name in modules) {
     const m = modules[name];
     if (m && m.resize) { try { m.resize(W, H); } catch (e) { /* a module must not stop the words */ } }
@@ -284,6 +296,7 @@ async function loadModule(name, factory, opts, epoch) {
     const handle = mod[factory](moduleCtx(), opts);
     if (handle && handle.resize) handle.resize(W, H);
     modules[name] = handle || null;
+    if (handle && handle.setTimeOfDay) { try { handle.setTimeOfDay(timeOfDay()); } catch (e) { /* optional */ } }
     if (name === "sky") applyFog(handle);
   } catch (e) {
     console.warn("Iskry: scene module \"" + name + "\" is unavailable.", e);
@@ -322,12 +335,56 @@ function loadModules() {
 }
 
 // The sky suggests a fog; the core applies it to WebGL and to the far words' color.
+// Called on load and again with every time-of-day tick (the sky may shift its fog).
+let fogHex = "";
 function applyFog(sky) {
   if (!sky || !sky.fogColor || !sky.fogColor.isColor) return;
   scene.fog.color.copy(sky.fogColor);
   if (sky.fogNear > 0) scene.fog.near = sky.fogNear;
   if (sky.fogFar > scene.fog.near) scene.fog.far = sky.fogFar;
-  root.style.setProperty("--scene-fog", "#" + sky.fogColor.getHexString());
+  const hex = "#" + sky.fogColor.getHexString();
+  if (hex !== fogHex) { fogHex = hex; root.style.setProperty("--scene-fog", hex); }
+}
+
+/* ---------- time of day ---------- */
+
+// The night follows the visitor's clock: dusk in the evening, deep night, then the cool
+// hour before dawn. Daytime is the evening here (the fire is always lit), so the dawn
+// hands over to dusk slowly in the morning. Weights sum to 1. ?hour=5.5 pins the clock (dev).
+const TIME_KEYS = [  // hour, dusk, night, dawn
+  [0, 0, 1, 0], [2.5, 0, 1, 0], [4.5, 0, 0.25, 0.75], [6.5, 0, 0, 1],
+  [8.5, 1, 0, 0], [19.5, 1, 0, 0], [22, 0, 1, 0], [24, 0, 1, 0]
+];
+const tod = { hour: 0, dusk: 0, night: 1, dawn: 0 };
+const pinnedHour = (() => {
+  const h = parseFloat(new URLSearchParams(location.search).get("hour"));
+  return isFinite(h) ? ((h % 24) + 24) % 24 : null;
+})();
+
+function timeOfDay() {
+  let h = pinnedHour;
+  if (h == null) { const d = new Date(); h = d.getHours() + d.getMinutes() / 60 + d.getSeconds() / 3600; }
+  let i = 0;
+  while (i < TIME_KEYS.length - 2 && h >= TIME_KEYS[i + 1][0]) i++;
+  const a = TIME_KEYS[i], b = TIME_KEYS[i + 1];
+  const t = smooth((h - a[0]) / (b[0] - a[0]));
+  tod.hour = h;
+  tod.dusk = lerp(a[1], b[1], t);
+  tod.night = lerp(a[2], b[2], t);
+  tod.dawn = lerp(a[3], b[3], t);
+  return tod;
+}
+
+let todAt = 0;
+function stepTimeOfDay() {
+  if (clock - todAt < TUNE.timeEvery) return;
+  todAt = clock;
+  timeOfDay();
+  for (const name in modules) {
+    const m = modules[name];
+    if (m && m.setTimeOfDay) { try { m.setTimeOfDay(tod); } catch (e) { /* optional */ } }
+  }
+  applyFog(modules.sky);
 }
 
 /* ---------- camera ---------- */
@@ -401,7 +458,9 @@ function spawn(x, ageMs, o) {
   const data = o && o.data ? o.data : pickWord();
   if (!data || onScreen[data.id]) return null;
 
-  const d = o && o.d ? o.d : depthAt(Math.pow(Math.random(), 1 / TUNE.depthBias));
+  const d = o && o.d ? o.d
+    : data.rare ? depthAt(randIn(TUNE.rareDepth))
+    : depthAt(Math.pow(Math.random(), 1 / TUNE.depthBias));
   const fog = fogAt(d);
   const fontPx = fontAt(d);
   const halfW = estimateHalfWidth(data.pl, fontPx);
@@ -512,15 +571,38 @@ function place(w, offsetPx) {
 
 const attended = (w) => w.hover || w.focus || w.ghost || w.state !== "drifting";
 
-function edgeFade(sx) {
+// Fades a word in and out at the edges. At the journal panel the whole word fades before
+// its leading end reaches the panel; at the viewport edge it may slide off as it fades.
+function edgeFade(sx, halfW) {
   const span = T.fadeEdge * W, pad = 0.03 * W;
-  return smooth((sx + pad) / span) * smooth((W + pad - sx) / span);
+  const j = clamp((W - skyEdge) / 40, 0, 1);
+  const right = lerp(W + pad, skyEdge - halfW, j);
+  return smooth((sx + pad) / span) * smooth((right - sx) / span);
+}
+
+// The journal panel narrows the open sky on its side while it is open.
+function readJournalEdge() {
+  const open = journalPanel && journalPanel.classList.contains("is-open");
+  const w = open ? journalPanel.offsetWidth : 0;   // layout width: ignores the slide-in transform
+  skyEdgeGoal = Math.max(W * 0.4, W - w);
+}
+
+function watchJournal() {
+  const jr = document.getElementById("journal-root");
+  if (!jr || !window.MutationObserver) return;
+  const hook = () => {
+    const panel = jr.querySelector("#journal-panel");
+    if (panel !== journalPanel) journalPanel = panel;
+    readJournalEdge();
+  };
+  new MutationObserver(hook).observe(jr, { subtree: true, childList: true, attributes: true, attributeFilter: ["class"] });
+  hook();
 }
 
 function targetAlpha(w, flick) {
   if (w.state !== "drifting") return 1;
   const fadeIn = T.durFadeIn > 0 ? smooth(w.age / T.durFadeIn) : (w.age >= 0 ? 1 : 0);
-  const edge = edgeFade(w.sx);
+  const edge = edgeFade(w.sx, w.halfW);
   let a = fadeIn * edge * lerp(1, T.fogAlpha, w.fog) * flick;
   a *= 1 - TUNE.occludeDim * w.occ;
   if (w.k > 0) a = lerp(a, Math.max(a, TUNE.attendLift * fadeIn * Math.max(edge, 0.6)), w.k);
@@ -543,7 +625,7 @@ function moveWord(w, dt, windMps) {
 
   if (w.state === "drifting") {
     // A word that has your attention waits at the downwind edge instead of fading away.
-    const edgeX = T.dir > 0 ? W * (1 - T.fadeEdge * 0.75) : W * T.fadeEdge * 0.75;
+    const edgeX = T.dir > 0 ? skyEdge - W * T.fadeEdge * 0.75 : W * T.fadeEdge * 0.75;
     const leaving = T.dir > 0 ? w.sx >= edgeX : w.sx <= edgeX;
     if (!(attend && leaving)) w.u += T.dir * windMps * w.jitter * mul * dt;
     w.t += dt * mul;
@@ -837,7 +919,7 @@ function stepWhispers(dt, windMps) {
     s.sx = W / 2 + (s.u * focal) / s.d;
     const up = ((0.5 - s.yf) * H * s.d) / focal;
     s.obj.position.set(camPos0.x + camFwd.x * s.d + s.u, camPos0.y + camFwd.y * s.d + camUp.y * up, camPos0.z + camFwd.z * s.d + camUp.z * up);
-    const a = TUNE.whisperAlpha * smooth(s.age / 5) * edgeFade(s.sx) * (holding ? 0.5 : 1);
+    const a = TUNE.whisperAlpha * smooth(s.age / 5) * edgeFade(s.sx, s.halfW) * (holding ? 0.5 : 1);
     s.alpha += (a - s.alpha) * ease(dt, 0.8);
     if (Math.abs(s.alpha - s.shown) > 0.004) { s.shown = s.alpha; s.el.style.opacity = s.alpha.toFixed(3); }
     const gone = T.dir > 0 ? s.sx > W + s.halfW + 30 : s.sx < -(s.halfW + 30);
@@ -909,6 +991,7 @@ function frame(now) {
   const windMps = (T.wind * T.depthNear / focal) * wander * (1 + TUNE.gustSwell * swell);
 
   updateCamera(dt);
+  skyEdge += (skyEdgeGoal - skyEdge) * ease(dt, TUNE.journalEase);
 
   let fireLevel = 1;
   for (const name in modules) {
@@ -932,6 +1015,7 @@ function frame(now) {
   }
   stepWhispers(dt, windMps);
   stepGust();
+  stepTimeOfDay();
   maybeSpawn();
 
   if (gl) gl.render(scene, camera);
@@ -996,6 +1080,7 @@ export function init(rootEl, words) {
   measure();
   loadModules();
   populate();
+  watchJournal();
 
   if (mq && mq.addEventListener) mq.addEventListener("change", onMotionChange);
   window.addEventListener("resize", onResize);
@@ -1016,4 +1101,4 @@ export function init(rootEl, words) {
 }
 
 Iskry.scene = { init };
-Iskry.scene._dbg = () => ({ occ: live.filter((w) => w.occ > 0.01).map((w) => w.id + ":" + w.occ.toFixed(2) + " d" + w.d.toFixed(1)), ghost: ghost && ghost.id, pointerPx, pointerPy, hitDirty, hitAt, clock, holding: holding && holding.state });
+Iskry.scene._dbg = () => ({ skyEdge, skyEdgeGoal, jp: !!journalPanel, occ: live.filter((w) => w.occ > 0.01).map((w) => w.id + ":" + w.occ.toFixed(2) + " d" + w.d.toFixed(1)), ghost: ghost && ghost.id, pointerPx, pointerPy, hitDirty, hitAt, clock, holding: holding && holding.state });
